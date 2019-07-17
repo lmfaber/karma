@@ -125,4 +125,5 @@ if __name__ == "__main__":
     ## Dammit ##
     ####    ####
     dammit_dir = f'{BASENAME}/dammit'
+    makedir(dammit_dir)
     dammit = Dammit(first_file = args.FASTA_FILE, second_file = fasta_output_file, output_dir = dammit_dir, database_dir = args.DATABASE_DIR, busco_group=args.BUSCO_GROUP)

@@ -188,7 +188,7 @@ class ReadGraph():
         plt.subplot(122)
         self.draw_graph(self.G, self.unlabeled)
 
-        output_file = f'{graph_visual_dir}/cluster_{self.cluster_number}'
+        output_file = f'{graph_visual_dir}/cluster_{self.cluster_number}.svg'
         plt.savefig(output_file, format='SVG')
         plt.close()
 
