@@ -10,10 +10,16 @@ parser.add_argument('-2', '--right', dest='R2', metavar='STR', help='')
 parser.add_argument('-s', '--single', dest='R', metavar='STR', default=None, help='')
 parser.add_argument('-o', '--output', dest='OUTPUT_DIR', metavar='STR', help='')
 parser.add_argument('-t', '--threads', dest='THREADS', metavar='INT', default=4, help='Threads to use. (default: 6)')
-parser.add_argument("-l", "--log", dest="LOGLEVEL", choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], default = logging.INFO, help="Set the logging level")
+
+
+parser.add_argument('--busco-group', dest='BUSCO_GROUP', metavar='STR', default=4, help='')
+parser.add_argument('--database-dir', dest='DATABASE_DIR', metavar='STR', default=4, help='')
+
+
+parser.add_argument("-l", "--log", dest="LOGLEVEL", choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], default = 'INFO', help="Set the logging level")
 args = parser.parse_args()
 
 # Set loggging level
-if args.LOGLEVEL != logging.INFO:
+if args.LOGLEVEL != 'INFO':
     logger.setLevel(args.LOGLEVEL)
     logger.info(f'Loglevel set to {args.LOGLEVEL}.')

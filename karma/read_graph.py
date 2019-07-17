@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import glob
 import shutil
 from cmd import Cmd
+from copy import deepcopy
 
 from logs import logger
 from contig import Contig
@@ -23,7 +24,7 @@ def basename_woe(path):
 
 class ReadGraph():
 
-    def __init__(self, labeled, unlabeled, mapping_dir, no, graph_dir, mcl_dir, threads=4):
+    def __init__(self, labeled, unlabeled, mapping_dir, no, graph_dir, mcl_dir, draw = False, threads = 4):
         # Initialized variables
         self.labeled = labeled
         self.unlabeled = unlabeled
@@ -34,6 +35,7 @@ class ReadGraph():
         self.cluster_number = no
         self.graph_dir = graph_dir
         self.mcl_dir = mcl_dir
+          
 
         # Created in the Class.
         self.contig_objs = []
@@ -42,11 +44,23 @@ class ReadGraph():
         self.cluster_file = None
         self.mcl_cluster = []
 
-        self.load_contig_info()
-        self.create_graph()
+        # Information for main program:
+        self.representative_sequences = []
+
+        if draw:
+            self.drawing_routine()
+        else:
+            self.load_contig_info()
+            self.create_graph()
+            self.mcl_clustering()
+            self.extract_cluster()
+            self.calculate_representative_sequences()
 
 
     def load_contig_info(self):
+        """
+        Reads the sam file for each contig and saves the needed information in a Contig object.
+        """
         logger.debug(f'Creating new contig object...')
         for contig_name in self.list_of_contigs:
             sam_file = f'{self.mapping_dir}/{contig_name}.sam'
@@ -77,23 +91,7 @@ class ReadGraph():
                 self.G.add_edge(first_contig.name, second_contig.name, weight = weight)
             except ZeroDivisionError:
                 weight = 0
-                pass
-        """
-        # Check which nodes are reachable from the original nodes and remove nodes that are not.
-        logger.debug('Trim graph')
-        for contig in self.unlabeled:
-            all_descendants = set( nx.algorithms.descendants(self.G, contig) )
-            labeled_contigs = set(self.labeled)
 
-            if len(all_descendants.intersection(labeled_contigs)) == 0: # Dont have a connection in graph
-                nx.remove_node(G, contig)
-                logger.debug(f'remove {contig}')
-
-        logger.debug(f'Original clusters: {self.labeled}')
-        #logger.debug(f'Clusters extracted: {clusters_per_cluster}')
-        """
-            
-            
 
     def mcl_clustering(self):
         """
@@ -143,7 +141,8 @@ class ReadGraph():
         ## Remove unnecessary contigs from graph
         for contig in new_unlabeled_list:
             self.G.remove_node(contig)
-        return(new_unlabeled_list)
+        
+        self.unlabeled = new_unlabeled_list
 
     def calculate_representative_sequences(self):
         """
@@ -151,8 +150,6 @@ class ReadGraph():
         To further increase the diversity and information of the assembly, the sequence with the lowest score is also chosen. The thought here is, that this sequence is the farthest away from all other sequences, so it will raise the information level of the assembly.
         Just a thought.
         """
-
-        representative_sequences = []
 
         node_weights = {}
         for node in self.G.nodes():
@@ -164,28 +161,58 @@ class ReadGraph():
 
             node_weights[node] = node_weight
 
-        # For each cluster take the sequence with the highest weight for now. TODO
-
+        # For each cluster take the sequence with the highest weight for now. TODO lowest weight?
         for i, cluster in enumerate(self.mcl_cluster):
             logger.debug(f'{i}: {cluster}')
             sub_node_weight = dict((k, node_weights[k]) for k in cluster)
-            representative_sequences.append( max(sub_node_weight, key=sub_node_weight.get) )
+            max_sequence_name = max(sub_node_weight, key=sub_node_weight.get)
+            self.representative_sequences.append( f'>{max_sequence_name}' )
         
-        #logger.debug(f'From {self.mcl_cluster} I propose the following sequences: {representative_sequences} ')
-        return(representative_sequences)
+    def drawing_routine(self):
+        
+        self.load_contig_info()
+        self.create_graph()
 
+        # Draw before clustering
+        graph_visual_dir = f'{self.graph_dir}/visual'
+        makedir(graph_visual_dir)
 
-    def draw_graph(self, G, output_file):
+        plt.figure(figsize=(20,10))
+        plt.subplot(121)
+        self.draw_graph(self.G, self.unlabeled, output_file)
+        
+        self.mcl_clustering()
+        self.extract_cluster()
+
+        # Draw after clustering
+        plt.subplot(122)
+        self.draw_graph(self.G, self.unlabeled, output_file)
+
+        output_file = f'{graph_visual_dir}/cluster_{self.cluster_number}'
+        plt.savefig(output_file, format='SVG')
+        plt.close()
+
+        self.calculate_representative_sequences()
+
+    def draw_graph(self, G, nodes_to_remove):
         """Draws a graph without edges of weight zero.
         
         Arguments:
             G {graph} -- Networkx graph.
             output_file {str} -- Output file.
         """
+        # Copy the graph
+        G = nx.Graph()
+        G = deepcopy(self.G)
+
+        for contig in nodes_to_remove:
+            if contig in G.nodes():
+                G.remove_node(contig)
+
         elarge = [(u, v) for (u, v, d) in G.edges(data=True) if d['weight'] > 0]
         esmall = [(u, v) for (u, v, d) in G.edges(data=True) if d['weight'] == 0.0]
 
-        plt.figure(figsize=(20,10))
+
         pos = nx.circular_layout(G)
         # nodes
         nx.draw_networkx_nodes(G, pos, node_size=500)
@@ -193,16 +220,16 @@ class ReadGraph():
         nx.draw_networkx_edges(G, pos, edgelist=elarge,width=2)
         nx.draw_networkx_edges(G, pos, edgelist=esmall,width=0)
         # labels
-        nx.draw_networkx_labels(G, pos, font_size=10, font_family='sans-serif')
+        nx.draw_networkx_labels(G, pos)
         # Edge labels of non zero weights:
         edge_labels = {}
         for u,v in G.edges():
             if G[u][v]['weight'] != 0:
                 edge_labels[(u,v)] = round(G[u][v]['weight'], 3)
-        nx.draw_networkx_edge_labels(G, pos, label_pos = 0.4, edge_labels = edge_labels)
 
+        nx.draw_networkx_edge_labels(G, pos, label_pos = 0.3, edge_labels = edge_labels)
         plt.axis('off')
-        plt.savefig(output_file, format='SVG')
+        plt.tight_layout()
 
     def calculate_alignments(self):
         # TODO
@@ -218,12 +245,3 @@ class ReadGraph():
                         SeqIO.write(original_fasta_sequences[contig], writer, 'fasta')
                 os.system(f'mafft --quiet --auto {alignment_dir}/cluster_{cluster_no}_{j}.fa > {alignment_dir}/cluster_{cluster_no}_{j}.aln')
         
-
-"""
-graph_dir = f'{RESULT_DIR}/graphs'
-makedir(graph_dir)
-graph_filename = f'{graph_dir}/{cluster_no}.svg'
-draw_graph(G, graph_filename)
-
-
-"""
