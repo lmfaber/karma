@@ -4,7 +4,7 @@ import subprocess
 from cmd import Cmd
 
 from cmd_parser import args
-from dammit import Dammit
+from annotate import Dammit
 from hisat2 import Hisat2
 from kmer import KmerClustering
 from logs import logger
@@ -40,6 +40,7 @@ if __name__ == "__main__":
     sequences = k.sequences
     labeled_contigs = k.clusters
     unlabeled_contigs = k.unlabeled_cluster[0]
+
 
     # Split all contigs in separate file
     # Perfom read mapping on all Contigs
@@ -124,6 +125,7 @@ if __name__ == "__main__":
     ####    ####
     ## Dammit ##
     ####    ####
+    logger.info('Perform de novo annotation.')
     dammit_dir = f'{BASENAME}/dammit'
     makedir(dammit_dir)
     dammit = Dammit(first_file = args.FASTA_FILE, second_file = fasta_output_file, output_dir = dammit_dir, database_dir = args.DATABASE_DIR, busco_group=args.BUSCO_GROUP)
