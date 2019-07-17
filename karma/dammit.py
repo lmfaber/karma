@@ -20,7 +20,7 @@ class Dammit:
 
     def run(self):
         for name, transcriptome in self.transcriptomes.items():
-            output_dir = 
+            output_dir = f'{self.output_dir}/{name}'
             dammit = Cmd(f'dammit annotate {transcriptome} -o {output_dir} --database-dir {self.database_dir} --busco-group {self.busco_group} --n_threads {self.threads}')
             dammit.run()
 
