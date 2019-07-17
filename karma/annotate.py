@@ -1,6 +1,8 @@
 from cmd import Cmd
 from dammit.fileio.gff3 import GFF3Parser
 import pandas as pd
+from logs import logger
+from collections import Counter
 
 def basename_woe(path):
     """ Basename without extension """
@@ -74,21 +76,21 @@ class Dammit:
         logger.info(f'Lost transcripts: {lost_transcripts}')
 
         # reduction of multiple transcripts
-        counter_before = Counter(namesA)
-        counter_after = Counter(namesB)
+        counter_before = Counter(names_before)
+        counter_after = Counter(names_after)
 
         total_counts_before = sum(counter_before.values())
         total_counts_after = sum(counter_after.values())
-        logger.info(f'reduced from {total_counts_before} by {total_counts_before-total_counts_after}')
+        logger.info(f'Reduced from {total_counts_before} by {total_counts_before-total_counts_after}')
 
         differences = 0
-        for a in total_counts_before.items():
+        for a in counter_before.items():
             current = a[0]
             c1 = counter_before[current]
             c2 = counter_after[current]
             if c2 != 0:
                 differences += c1-c2
-        differences = differences / len(n.items())
+        differences = differences / len(counter_before.items())
         logger.info(f'Reduced by ~ {differences} sequences per cluster.')
 
         # annotations.to_csv('ANNOTATIONS.csv')
