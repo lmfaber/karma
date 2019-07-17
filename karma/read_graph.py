@@ -179,14 +179,14 @@ class ReadGraph():
 
         plt.figure(figsize=(20,10))
         plt.subplot(121)
-        self.draw_graph(self.G, self.unlabeled, output_file)
+        self.draw_graph(self.G, self.unlabeled)
         
         self.mcl_clustering()
         self.extract_cluster()
 
         # Draw after clustering
         plt.subplot(122)
-        self.draw_graph(self.G, self.unlabeled, output_file)
+        self.draw_graph(self.G, self.unlabeled)
 
         output_file = f'{graph_visual_dir}/cluster_{self.cluster_number}'
         plt.savefig(output_file, format='SVG')
