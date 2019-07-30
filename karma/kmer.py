@@ -1,16 +1,15 @@
-import umap
-import numpy as np
-import hdbscan
-from multiprocessing import Pool
-from collections import Counter, OrderedDict
-import sys
 import os
-import matplotlib.pyplot as plt
-import seaborn as sns
+import sys
+from collections import Counter, OrderedDict
+from multiprocessing import Pool
 
+import hdbscan
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+import umap
 from logs import logger
 
-sns.set(style='white', context='poster', rc={'figure.figsize':(14,10)})
 
 def cdhit_like_output(sequence_ids, sequences, cluster_ids, probabilities, filename='cluster'):
     """    Creates a cd-hit-est like output for the clusters from umap and hdbscan
@@ -105,30 +104,6 @@ def reverse_complement_sequence(sequence):
     compl = complement_sequence(sequence)
     return( compl[::-1] )
 
-def read_fasta_file(fasta_file):
-    """Reads a fasta file and saves the entries as OrderedDict from collections
-    
-    Arguments:
-        fasta_file {str} -- Fasta file to read.
-    """
-    logger.info('Reading fasta file.')
-    sequences = OrderedDict()
-    sequence_names = []
-    with open(fasta_file, 'r') as reader:
-        seq_name = reader.readline().rstrip('\n')
-        sequence = ''
-        for line in reader:
-            if line.startswith('>'):
-                sequences[seq_name] = sequence
-                seq_name = line.rstrip('\n')
-                sequence = ''
-            else:
-                sequence += line.rstrip('\n')
-        sequences[seq_name] = sequence
-    logger.debug(f'Read {len(sequences)} sequences in total.')
-    return(sequences)
-
-
 def count_kmer_occurence(sequences, kmer_size=None):
     """Counts actually appearing kmers in list of sequences and returns a list of Counter objects.
     
@@ -178,16 +153,22 @@ def mask_list(list_to_mask, mask):
 
 class KmerClustering():
 
-    def __init__(self, fasta_file, threads = 2, kmer_size=None):
-        self.fasta_file = fasta_file
+    def __init__(self, sequences, output_file, threads = 2, kmer_size=None):
+        self.sequences = sequences
+        self.output_file = output_file
         self.threads = threads
         self.kmer_size = kmer_size
 
         self.clusters = []
         self.unlabeled_cluster = []
-        self.sequences = None
         self.kmers = None
         self.sorted_kmer_set = set()
+
+        if os.path.isfile(self.output_file):
+            logger.info(f'Read from previous calculation: {self.output_file}')
+            self.read_clusters()
+        else:
+            self.run()
 
     def fill_array_for_contig(self, *args):
         """
@@ -203,6 +184,26 @@ class KmerClustering():
             # Normalize kmer appearance to length of sequence
             posCounts.append((row, col, count/length))
         return(posCounts)
+
+    def save_groups_to_file(self):
+        """
+        Saves the names of contigs from labeled clusters and unlabeled clusters into one file. Names are tab separated.
+        The first line contains the unlabeled contigs.
+        """
+
+        with open(self.output_file, 'w') as cluster_writer:
+            cluster_writer.write('\t'.join(self.unlabeled_cluster[0]) + '\n')
+            for cluster in self.clusters:
+                cluster_writer.write('\t'.join(cluster) + '\n')
+
+    def read_clusters(self):
+        """
+        Reads existing cluster from previous runs.
+        """
+        with open(self.output_file, 'r') as cluster_reader:
+            self.unlabeled_cluster = [cluster_reader.readline().rstrip('\n').split('\t')]
+            for line in cluster_reader:
+                self.clusters.append(line.rstrip('\n').split('\t'))
 
     def extract_kmers(self, sequences, kmer_size=None):
         """Extracts all kmers from a list of sequences.
@@ -240,13 +241,8 @@ class KmerClustering():
         return( kmer_dict )
 
     def run(self):
-        ## 1. READ FASTA FILE
-        self.sequences = read_fasta_file(self.fasta_file)
-
-
         ## 2. Extract kmers from sequences. Using sets. Dictionary! Used in fill_array for  function
         self.kmers = self.extract_kmers(self.sequences, kmer_size=self.kmer_size)
-
 
         # Initialize empty numpy array:
         logger.debug('Initialize empty numpy array...')
@@ -276,7 +272,7 @@ class KmerClustering():
             try:
                 assert np.any(kmer_profile[:,n]), 'At least one column has all zero values...'
             except AssertionError:
-                logger.error(f'Values of col {n} are all zero, which should not be the case.')
+                logger.error(f'Values of column {n} are all zero, which should not be the case.')
                 logger.debug(f'Problematic kmer: {self.sorted_kmer_set[n]}\n{kmer_profile[:,n]}')
                 exit(1)
         self.sorted_kmer_set.clear()
@@ -299,6 +295,10 @@ class KmerClustering():
 
         self.clusters, self.unlabeled_cluster = mask_list(self.sequences, clusterer.labels_)
         logger.debug(f'Cluster labels: {clusterer.labels_}')
+
+        ## Save to file 
+        self.save_groups_to_file()
+
 
         # bname = os.path.splitext(os.path.basename(inFile))[0]
         # f = f'{bname}_allow_single_cluster_k{KMER_SIZE}_min{min_cluster_size}'

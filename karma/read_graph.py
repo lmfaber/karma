@@ -1,16 +1,17 @@
-from Bio import SeqIO
-import os
-import networkx as nx
-import itertools
-import subprocess
-import matplotlib.pyplot as plt
 import glob
+import itertools
+import os
 import shutil
+import subprocess
 from cmd import Cmd
 from copy import deepcopy
 
-from logs import logger
+import matplotlib.pyplot as plt
+import networkx as nx
+from Bio import SeqIO
 from contig import Contig
+from logs import logger
+import numpy as np
 
 
 def makedir(path):
@@ -24,125 +25,147 @@ def basename_woe(path):
 
 class ReadGraph():
 
-    def __init__(self, labeled, unlabeled, mapping_dir, no, graph_dir, mcl_dir, draw = False, threads = 4):
-        # Initialized variables
-        self.labeled = labeled
-        self.unlabeled = unlabeled
-        self.list_of_contigs = self.labeled + self.unlabeled
-
-        self.threads = threads
-        self.mapping_dir = mapping_dir
-        self.cluster_number = no
-        self.graph_dir = graph_dir
-        self.mcl_dir = mcl_dir
-          
-
-        # Created in the Class.
-        self.contig_objs = []
+    def __init__(self):
         self.G = nx.Graph()
+        self.original_contigs = []
 
-        self.cluster_file = None
         self.mcl_cluster = []
 
-        # Information for main program:
-        self.representative_sequences = []
 
-        if draw:
-            self.drawing_routine()
-        else:
-            self.load_contig_info()
-            self.create_graph()
-            self.mcl_clustering()
-            self.extract_cluster()
-            self.calculate_representative_sequences()
-
-
-    def load_contig_info(self):
+    def create_graph(self, contigs):
+        """Creates initital graph with a list of contig obejcts.
+        
+        Arguments:
+            contigs {[type]} -- [description]
         """
-        Reads the sam file for each contig and saves the needed information in a Contig object.
-        """
-        logger.debug(f'Creating new contig object...')
-        for contig_name in self.list_of_contigs:
-            sam_file = f'{self.mapping_dir}/{contig_name}.sam'
-            with open(sam_file, 'r') as sam_reader:
-                new_contig = Contig(contig_name)
-                for line in sam_reader:
-                    infos = line.split('\t')
-                    name = infos[2]
-                    read = infos[0]
-                    position = infos[3]
-                    # TODO: Check if this can be left out. Should be possible, because mapping took place on single contigs.
-                    #if name == new_contig.name:
-                    #    new_contig.add_read(read, position)
-                    new_contig.add_read(read, position)
-                self.contig_objs.append(new_contig)
-
-    def create_graph(self):
-        logger.info('Calculate graph.')
-        for (first_contig, second_contig) in itertools.combinations(self.contig_objs, 2):
+        logger.debug('Initial graph calculation.')
+        for (first_contig, second_contig) in itertools.combinations(contigs, 2):
             overlap = len(first_contig.readset.intersection(second_contig.readset))
             # Normalize the weight:
             # (overlap/len(C1))(overlap/len(C2)) / 2
             mapped_reads_contig_A = len(first_contig.readset)
-            mapped_reads_contig_B = len(first_contig.readset)
+            mapped_reads_contig_B = len(second_contig.readset)
 
             try:
-                weight = ( (overlap/mapped_reads_contig_A) + (overlap/mapped_reads_contig_B) ) / 2
-                self.G.add_edge(first_contig.name, second_contig.name, weight = weight)
+                weight = ( (overlap/mapped_reads_contig_A) + (overlap/mapped_reads_contig_B) ) / 2 
             except ZeroDivisionError:
                 weight = 0
+            self.G.add_edge(first_contig.name, second_contig.name, weight = weight)
+        
+        
+        unconnected_nodes = self.unconnected_nodes()
+        
+        # Save contig objs that are not trimmed.
+        for contig in contigs:
+            if contig.name not in unconnected_nodes:
+                self.original_contigs.append(contig)
 
+        return unconnected_nodes
 
-    def mcl_clustering(self):
+    def trim(self):
         """
-        MCL: The input is then a file or stream in which each line encodes an edge in terms of two labels 
-         (the 'A' and the 'B') and a numerical value (the 'C'), all separated by white space.
+        Removes nodes from the graph that dont connect to other contigs. Returns contigs that are not connected.
+        """
+        node_weights = {}
+        unconnected_nodes = self.unconnected_nodes()
+        for node in unconnected_nodes:
+            self.G.remove_node(node)
+        return unconnected_nodes
+
+    def calculate_node_weights(self):
+        """
+        For all nodes:
+        Adds the weights for each connection for a node in the graph.
+        Returns a dictionary.
+        """
+        node_weights = {}
+        for node in self.G.nodes():
+            edges = self.G.edges(node, data=True)
+
+            node_weight = 0
+            for _, _, w in edges:
+                node_weight += w['weight']
+            node_weights[node] = node_weight
+        logger.debug(f'Node weights: {node_weights}')
+        return node_weights
+
+    def unconnected_nodes(self):
+        """
+        Returns all unconnected nodes
+        """
+        node_weights = self.calculate_node_weights()
+        unconnected_nodes = []
+        for node, weight in node_weights.items():
+            if weight == 0:
+                unconnected_nodes.append(node)
+        return unconnected_nodes
+
+    def update_graph(self, contigs):
+        """Updates the graph with new given contig objs. And trims the graph again.
+        
+        Arguments:
+            contigs {[type]} -- [description]
+        """
+        logger.debug('Updating graph.')
+        for (existing_contig, new_contig) in itertools.product(self.original_contigs, contigs):
+            overlap = len(existing_contig.readset.intersection(new_contig.readset))
+            # Normalize the weight:
+            # (overlap/len(C1))(overlap/len(C2)) / 2
+            mapped_reads_contig_A = len(existing_contig.readset)
+            mapped_reads_contig_B = len(new_contig.readset)
+
+            try:
+                weight = ( (overlap/mapped_reads_contig_A) + (overlap/mapped_reads_contig_B) ) / 2 
+            except ZeroDivisionError:
+                weight = 0
+            self.G.add_edge(existing_contig.name, new_contig.name, weight = weight)
+
+    def save_graph(self, filename):
+        """
+        Saves the graph as abc-file. E.g.
         A B 20
         A C 10
-        The output is then a file where each line is a cluster of tab-separated labels.
         """
-        logger.debug('Save cluster as file')
-
-        # TODO: CARE!!! clusters are not in order, so i need a file check that is good. Currently deleting the file and creating a new one, so the problem doesnt occur
-        abc_file = f'{self.graph_dir}/graph_{self.cluster_number}.abc'
-        if os.path.isfile(abc_file):
-            os.remove(abc_file)
-        nx.write_weighted_edgelist(self.G, abc_file)
-
-        logger.debug('Clustering...')
-        mcl_output_file = f'{self.mcl_dir}/cluster_{self.cluster_number}.mcl'
-        self.cluster_file = mcl_output_file
-        if os.path.isfile(mcl_output_file):
-            os.remove(mcl_output_file)
-        mcl = Cmd(f'mcl {abc_file} --abc -o {mcl_output_file} -te {self.threads} -resource 4 -V all')
-        mcl.run()
-
-    def extract_cluster(self):
+        if os.path.isfile(filename):
+            os.remove(filename)
+        nx.write_weighted_edgelist(self.G, filename)
+    
+    def extract_mcl_clusters(self, mcl_cluster_file, original_contigs=None):
         """
-        Extracts only the clusters from the mcl output, that were in the originally kmer based cluster. All other clusters are then readded to the unlabeled cluster.
+        Remove all contigs that don't have a connection to the original contigs.
+        Returns all contigs that either:
+            1. are not in a group with the original contigs.
+            2. Dont have a connection to another contig
         """
-        original_cluster = set(self.labeled)
-
-        contigs_with_connections = []
-
         new_unlabeled_list = []
-        with open(self.cluster_file, 'r') as cluster_reader:
+
+        # Case 1
+        if original_contigs == None:
+            original_cluster = set([contig.name for contig in self.original_contigs])
+        else:
+            original_cluster = set(original_contigs)
+
+        not_connected_to_original_contigs = []
+        mcl_cluster = []
+        logger.debug(f'Original_cluster: {original_cluster}')
+        with open(mcl_cluster_file, 'r') as cluster_reader:
             for line in cluster_reader:
                 line = line.rstrip('\n')
                 line = set(line.split('\t'))
-                if len(original_cluster.intersection(line)) != 0:
-                    contigs_with_connections += list(line)
-                    self.mcl_cluster.append(list(line))
+
+                if len(original_cluster.intersection(line)) == 0:
+                    not_connected_to_original_contigs += list(line)
                 else:
-                    new_unlabeled_list += list(line)
-        #logger.debug(f'Original clusters: {self.labeled}')
-        logger.debug(f'Clusters extracted: {contigs_with_connections}')
-        #logger.debug(f'Labels not clustered: {new_unlabeled_list}')
-        ## Remove unnecessary contigs from graph
-        for contig in new_unlabeled_list:
+                    self.mcl_cluster.append(list(line))
+
+        return not_connected_to_original_contigs
+
+
+    def remove_contigs(self, contigs):
+        ## Remove all contigs that don't have a connection to the original contigs.
+        for contig in contigs:
             self.G.remove_node(contig)
-        
-        self.unlabeled = new_unlabeled_list
+
 
     def calculate_representative_sequences(self):
         """
@@ -151,97 +174,121 @@ class ReadGraph():
         Just a thought.
         """
 
-        node_weights = {}
-        for node in self.G.nodes():
-            edges = self.G.edges(node, data=True)
-
-            node_weight = 0
-            for _, _, w in edges:
-                node_weight += w['weight']
-
-            node_weights[node] = node_weight
+        node_weights = self.calculate_node_weights()
 
         # For each cluster take the sequence with the highest weight for now. TODO lowest weight?
+        representative_sequences = []
         for i, cluster in enumerate(self.mcl_cluster):
             logger.debug(f'{i}: {cluster}')
             sub_node_weight = dict((k, node_weights[k]) for k in cluster)
             max_sequence_name = max(sub_node_weight, key=sub_node_weight.get)
-            self.representative_sequences.append( f'>{max_sequence_name}' )
+            representative_sequences.append( f'>{max_sequence_name}' )
         
-    def drawing_routine(self):
+        return representative_sequences
         
-        self.load_contig_info()
-        self.create_graph()
 
-        # Draw before clustering
-        graph_visual_dir = f'{self.graph_dir}/visual'
-        makedir(graph_visual_dir)
-
-        plt.figure(figsize=(20,10))
-        plt.subplot(121)
-        self.draw_graph(self.G, self.unlabeled)
-        
-        self.mcl_clustering()
-        self.extract_cluster()
-
-        # Draw after clustering
-        plt.subplot(122)
-        self.draw_graph(self.G, self.unlabeled)
-
-        output_file = f'{graph_visual_dir}/cluster_{self.cluster_number}.svg'
-        plt.savefig(output_file, format='SVG')
-        plt.close()
-
-        self.calculate_representative_sequences()
-
-    def draw_graph(self, G, nodes_to_remove):
+    def draw_graph(self, output_file):
         """Draws a graph without edges of weight zero.
         
         Arguments:
             G {graph} -- Networkx graph.
             output_file {str} -- Output file.
         """
-        # Copy the graph
-        G = nx.Graph()
-        G = deepcopy(self.G)
-
-        for contig in nodes_to_remove:
-            if contig in G.nodes():
-                G.remove_node(contig)
-
-        elarge = [(u, v) for (u, v, d) in G.edges(data=True) if d['weight'] > 0]
-        esmall = [(u, v) for (u, v, d) in G.edges(data=True) if d['weight'] == 0.0]
 
 
-        pos = nx.circular_layout(G)
-        # nodes
-        nx.draw_networkx_nodes(G, pos, node_size=500)
-        # edges
-        nx.draw_networkx_edges(G, pos, edgelist=elarge,width=2)
-        nx.draw_networkx_edges(G, pos, edgelist=esmall,width=0)
-        # labels
-        nx.draw_networkx_labels(G, pos)
-        # Edge labels of non zero weights:
-        edge_labels = {}
-        for u,v in G.edges():
-            if G[u][v]['weight'] != 0:
-                edge_labels[(u,v)] = round(G[u][v]['weight'], 3)
+        if not os.path.exists(output_file):
 
-        nx.draw_networkx_edge_labels(G, pos, label_pos = 0.3, edge_labels = edge_labels)
-        plt.axis('off')
-        plt.tight_layout()
+            # figsize is intentionally set small to condense the graph
+            fig, ax = plt.subplots(figsize=(10,10))
+            margin=0.33
+            fig.subplots_adjust(margin, margin, 1.-margin, 1.-margin)
+            ax.axis('equal')
 
-    def calculate_alignments(self):
-        # TODO
-        alignment_dir = f'{RESULT_DIR}/alignments'
-        makedir(alignment_dir)
+            pos = nx.circular_layout(self.G)
 
-        with open(mcl_output_file, 'r') as reader, open(fastaFile, 'r') as fastaReader:
-            original_fasta_sequences = SeqIO.to_dict(SeqIO.parse(fastaReader, 'fasta'))
-            for j, line in enumerate(reader, 1):
-                with open(f'{alignment_dir}/cluster_{cluster_no}_{j}.fa', 'w') as writer:
-                    line = line.split()
-                    for contig in line:
-                        SeqIO.write(original_fasta_sequences[contig], writer, 'fasta')
-                os.system(f'mafft --quiet --auto {alignment_dir}/cluster_{cluster_no}_{j}.fa > {alignment_dir}/cluster_{cluster_no}_{j}.aln')
-        
+            node_list = self.G.nodes()
+            n = len(node_list)
+            angle_dict = {}
+            for i, node in zip(range(n), node_list):
+                theta = 2.0 * np.pi * i/n
+                angle_dict[node] = theta
+
+            # Nodes
+            elarge = [(u, v) for (u, v, d) in self.G.edges(data=True) if d['weight'] > 0]
+            esmall = [(u, v) for (u, v, d) in self.G.edges(data=True) if d['weight'] == 0.0]
+            nx.draw_networkx_nodes(self.G, pos=pos, node_size=500, ax = ax)
+
+            # Edges
+            nx.draw_networkx_edges(self.G, pos, edgelist=elarge,width=2,ax = ax)
+            nx.draw_networkx_edges(self.G, pos, edgelist=esmall,width=0,ax = ax)
+
+            # Edge labels of non zero weights
+            edge_labels = {}
+            for u,v in self.G.edges():
+                if self.G[u][v]['weight'] != 0:
+                    edge_labels[(u,v)] = round(self.G[u][v]['weight'], 3)
+            nx.draw_networkx_edge_labels(self.G, pos, label_pos = 0.4, edge_labels = edge_labels,ax = ax)
+
+            # Draw labels
+            labels = {key:key for key in node_list}
+            description = nx.draw_networkx_labels(self.G, pos=pos, labels=labels,ax = ax)
+
+            # Correct the position of the Node names
+            r = fig.canvas.get_renderer()
+            trans = plt.gca().transData.inverted()
+            for node, t in description.items():
+                bb = t.get_window_extent(renderer=r)
+                bbdata = bb.transformed(trans)
+                orientation = ''
+
+                if 5/6 * np.pi >= angle_dict[node] >= 1/6 * np.pi:
+                    orientation = 'TOP'
+                elif 7/6 * np.pi >= angle_dict[node] >= 5/6 * np.pi:
+                    orientation = 'LEFT'
+                elif 11/6 * np.pi >= angle_dict[node] >= 7/6 * np.pi:
+                    orientation = 'DOWN'
+                else:
+                    orientation = 'RIGHT'
+
+                if orientation == 'TOP' or orientation == 'DOWN':
+                    radius = 1.2+bbdata.height/1.1
+                elif orientation == 'RIGHT' or orientation == 'LEFT':
+                    radius = 1.15+bbdata.width/2.
+
+                offset = 0
+                if (orientation == 'TOP' or orientation == 'DOWN') and (1/2 * np.pi >= angle_dict[node] or angle_dict[node] >= 3/2 * np.pi): # right
+                    offset = 2.2*(len(node) / 100)
+                elif (orientation == 'TOP' or orientation == 'DOWN') and (1/2 * np.pi <= angle_dict[node] or angle_dict[node] <= 3/2 * np.pi): # left
+                    offset = -2.2 * (len(node) / 100)
+
+                position = (radius*np.cos(angle_dict[node])+offset,radius* np.sin(angle_dict[node]))   
+
+                t.set_position(position)
+                t.set_clip_on(False)
+            plt.axis('off')
+            plt.savefig(output_file, format='SVG')
+            plt.close()
+
+    def get_nodes(self):
+        """
+        Returns the nodes in the graph.
+        """
+        return(list(self.G.nodes()))
+
+
+    # def calculate_alignments(self):
+    #     # TODO
+    #     alignment_dir = f'{RESULT_DIR}/alignments'
+    #     makedir(alignment_dir)
+
+    #     with open(mcl_output_file, 'r') as reader, open(fastaFile, 'r') as fastaReader:
+    #         original_fasta_sequences = SeqIO.to_dict(SeqIO.parse(fastaReader, 'fasta'))
+    #         for j, line in enumerate(reader, 1):
+    #             with open(f'{alignment_dir}/cluster_{cluster_no}_{j}.fa', 'w') as writer:
+    #                 line = line.split()
+    #                 for contig in line:
+    #                     SeqIO.write(original_fasta_sequences[contig], writer, 'fasta')
+    #             os.system(f'mafft --quiet --auto {alignment_dir}/cluster_{cluster_no}_{j}.fa > {alignment_dir}/cluster_{cluster_no}_{j}.aln')
+
+
+

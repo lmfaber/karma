@@ -35,16 +35,18 @@ class Hisat2:
 
     def run(self, reads):
         if not self.mapping_has_run:
+            logger.debug('Starting mapping...')
             if len(reads) == 1: # single end reads
-                hisat = Cmd(f'hisat2 -q -x {self.index_name} -U {reads[0]} -S {self.output_file}')
+                hisat = Cmd(f'hisat2 -q -x {self.index_name} -U {reads[0]} | \
+                                samtools view -hS -F 4 -q 1 | \
+                                samtools sort | \
+                                samtools view -o {self.output_file} ')
             elif len(reads) == 2: # paired end reads
-                logger.debug('Starting mapping...')
                 hisat = Cmd(f'hisat2 -q --threads {self.threads} -k 1 -x {self.index_name} -1 {reads[0]} -2 {reads[1]} | \
                                 samtools view -hS -F 4 -q 1 | \
                                 samtools sort | \
                                 samtools view -o {self.output_file}')
             hisat.run()
-            logger.debug(hisat.status)
             self.mapping_has_run = True
         else:
             logger.debug('Skipping mapping.')

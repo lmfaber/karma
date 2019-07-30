@@ -8,15 +8,15 @@ class Writer:
         Sequences to write in dictionary.
         
         Arguments:
-            sequences {[type]} -- [description]
+            sequences {dict} -- key/value: header/sequence
         """
         n = 80
         with open(self.file_name, 'w') as fasta_writer:
-            for key, item in sequences.items():
+            for header, sequence in sequences.items():
                 # Write header
-                fasta_writer.write(key + '\n')
+                fasta_writer.write(header + '\n')
                 # Write sequence
-                for part in [item[i:i+n] for i in range(0, len(item), n)]:
+                for part in [sequence[i:i+n] for i in range(0, len(sequence), n)]:
                     fasta_writer.write(part + '\n')
 
     def write_clstr(self, clusters, representative_sequences):

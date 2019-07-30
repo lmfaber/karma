@@ -1,25 +1,41 @@
 import argparse
-import logging
 from logs import logger
+import os
 
 parser = argparse.ArgumentParser(description='Description.')
-parser.add_argument('-i', '--input', dest='FASTA_FILE', metavar='STR', help='')
-parser.add_argument('-k', '--kmer', dest='KMER_SIZE', metavar='STR', default = None, help='')
-parser.add_argument('-1', '--left', dest='R1', metavar='STR', help='')
-parser.add_argument('-2', '--right', dest='R2', metavar='STR', help='')
-parser.add_argument('-s', '--single', dest='R', metavar='STR', default=None, help='')
-parser.add_argument('-o', '--output', dest='OUTPUT_DIR', metavar='STR', help='')
-parser.add_argument('-t', '--threads', dest='THREADS', metavar='INT', default=4, help='Threads to use. (default: 6)')
+parser.add_argument('-i', '--input', dest='FASTA_FILE', metavar='STR', help='Input fasta file to cluster.')
+parser.add_argument('-k', '--kmer', dest='KMER_SIZE', metavar='STR', default = None, help='Kmer size to perform kmer based clustering. default: 5p6-mer')
+parser.add_argument('-1', '--left', dest='R1', metavar='STR', help='Left reads.')
+parser.add_argument('-2', '--right', dest='R2', metavar='STR', help='Right reads.')
+parser.add_argument('-s', '--single', dest='R', metavar='STR', default=None, help='Single end reads.')
+parser.add_argument('-o', '--output', dest='OUTPUT_DIR', metavar='STR', default=None, help='Output directory.')
+parser.add_argument('-t', '--threads', dest='THREADS', type=int, metavar='INT', default=6, help='Threads to use. (default: 6)')
+parser.add_argument('--keep-sam', dest='KEEP_SAM', action='store_true', default=False, help='Keep sam files. Takes a lot of space. default: False')
+parser.add_argument("-l", "--log", dest="LOGLEVEL", choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], default = 'INFO', help="Set the logging level.")
 
+# Annotation options
+parser.add_argument('--annotate', dest='ANNOTATE', action='store_true', default=False, help='Do you want to annotate? Because thats how you annotate.')
+parser.add_argument('--busco-group', dest='BUSCO_GROUP', metavar='STR', choices=['actinobacteria', 'actinopterygii',
+'alveolata_stramenophiles', 'arthropoda', 'ascomycota', 'aves', 'bacillales', 'bacteria',
+'bacteroidetes', 'basidiomycota', 'betaproteobacteria', 'clostridia', 'cyanobacteria',
+'deltaepsilonsub', 'dikarya', 'diptera', 'embryophyta', 'endopterygota',
+'enterobacteriales', 'euarchontoglires', 'eukaryota', 'eurotiomycetes', 'firmicutes',
+'fungi', 'gammaproteobacteria', 'hymenoptera', 'insecta', 'lactobacillales',
+'laurasiatheria', 'mammalia', 'metazoa', 'microsporidia', 'nematoda', 'pezizomycotina',
+'proteobacteria', 'protists', 'rhizobiales', 'saccharomyceta', 'saccharomycetales',
+'sordariomyceta', 'spirochaetes', 'tenericutes', 'tetrapoda', 'vertebrata'], default='metazoa', help='(default: metazoa)')
+parser.add_argument('--database-dir', dest='DATABASE_DIR', metavar='STR', help='Directory with already built dammit database.')
 
-parser.add_argument('--busco-group', dest='BUSCO_GROUP', metavar='STR', default=4, help='')
-parser.add_argument('--database-dir', dest='DATABASE_DIR', metavar='STR', default=4, help='')
-
-
-parser.add_argument("-l", "--log", dest="LOGLEVEL", choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], default = 'INFO', help="Set the logging level")
 args = parser.parse_args()
 
 # Set loggging level
 if args.LOGLEVEL != 'INFO':
     logger.setLevel(args.LOGLEVEL)
     logger.info(f'Loglevel set to {args.LOGLEVEL}.')
+
+if args.OUTPUT_DIR:
+    args.OUTPUT_DIR = os.path.abspath(args.OUTPUT_DIR) + '/'
+else:
+    args.OUTPUT_DIR = ''
+
+logger.info(args.OUTPUT_DIR)
