@@ -8,69 +8,139 @@ from copy import deepcopy
 
 import matplotlib.pyplot as plt
 import networkx as nx
-from Bio import SeqIO
 from contig import Contig
 from logs import logger
 import numpy as np
 
 
-def makedir(path):
-    if not os.path.exists(path):
-        os.mkdir(path)
-
-def basename_woe(path):
-    """ Basename without extension """
-    return os.path.splitext(os.path.basename(path))[0]
-
-
 class ReadGraph():
 
-    def __init__(self):
-        self.G = nx.Graph()
+    def __init__(self, graph):
+        self.G = nx.Graph(graph)
         self.original_contigs = []
-
         self.mcl_cluster = []
 
-
-    def create_graph(self, contigs):
+    @classmethod
+    def from_contigs(cls, contigs):
         """Creates initital graph with a list of contig obejcts.
         
         Arguments:
             contigs {[type]} -- [description]
         """
+        G = nx.Graph()
         logger.debug('Initial graph calculation.')
         for (first_contig, second_contig) in itertools.combinations(contigs, 2):
-            overlap = len(first_contig.readset.intersection(second_contig.readset))
             # Normalize the weight:
             # (overlap/len(C1))(overlap/len(C2)) / 2
+            overlap = len(first_contig.readset.intersection(second_contig.readset))
             mapped_reads_contig_A = len(first_contig.readset)
             mapped_reads_contig_B = len(second_contig.readset)
 
             try:
-                weight = ( (overlap/mapped_reads_contig_A) + (overlap/mapped_reads_contig_B) ) / 2 
+                weight = ( (overlap/mapped_reads_contig_A) + (overlap/mapped_reads_contig_B) ) / 2
             except ZeroDivisionError:
                 weight = 0
-            self.G.add_edge(first_contig.name, second_contig.name, weight = weight)
-        
-        
-        unconnected_nodes = self.unconnected_nodes()
-        
-        # Save contig objs that are not trimmed.
-        for contig in contigs:
-            if contig.name not in unconnected_nodes:
-                self.original_contigs.append(contig)
+            
+            if weight > 0:
+                G.add_edge(first_contig.name, second_contig.name, weight = weight)
+            else:
+                G.add_nodes_from([first_contig.name, second_contig.name])
+        return cls(G)
 
+    def set_original_contigs(self, original_contigs):
+        self.original_contigs = original_contigs
+
+    def get_subgraph(self, nodes):
+        return self.G.subgraph(nodes)
+
+    @classmethod
+    def from_equivalence_classes(cls, equivalence_class_file):
+        G = nx.Graph()
+
+        # Create a hash to identify the contig names from the equivalence class numbers
+        with open(equivalence_class_file, 'r') as reader:
+            no_of_contigs = int(reader.readline())
+            no_of_eq_classes = int(reader.readline())
+            contig_hash = {}
+            for i in range(no_of_contigs):
+                contig = reader.readline().rstrip('\n')
+                contig_hash[str(i)] = contig
+            eq_classes = [line.rstrip('\n') for line in reader.readlines()]
+
+        # Count the total number of mapped reads for each contig
+        max_number_of_mapped_reads = {}
+        for line in eq_classes:
+            eq_size, *contig_ids, count = line.split('\t')
+            count = int(count)
+            for contig_id in contig_ids:
+                contig_id = contig_hash[contig_id]
+                if contig_id in max_number_of_mapped_reads:
+                    old_value = max_number_of_mapped_reads[contig_id]
+                    new_value = int(count) + old_value
+                    max_number_of_mapped_reads[contig_id] = new_value
+                else:
+                    max_number_of_mapped_reads[contig_id] = int(count)
+
+        # Count how many reads are shared by the contigs.
+        shared_reads = {}
+        for line in eq_classes:
+            eq_size, *contig_ids, count = line.split('\t')
+            count = int(count)
+            if eq_size == '1':
+                continue
+            else:
+                for (A, B) in itertools.combinations(contig_ids, 2):
+                    A = contig_hash[A]
+                    B = contig_hash[B]
+                    if G.has_edge(A, B):
+                        existing_edge = G.get_edge_data(A, B)
+                        old_weight = existing_edge['weight']
+                        new_weight = old_weight + int(count)
+                        G.add_edge(A, B, weight = new_weight)
+                    else:
+                        G.add_edge(A, B, weight = count)
+
+        weighted_graph = nx.Graph()
+        # Normalize and update weights
+        for A, B, data in G.edges(data = True):
+            shared_reads = data['weight']
+            logger.debug(f'Shared Reads: {A} / {B} -- {shared_reads}')
+            if shared_reads == 0:
+                logger.debug(f'{A} / {B} : {shared_reads}')
+                weighted_graph.add_nodes_from([A, B])
+            else:
+                total_reads_A = max_number_of_mapped_reads[A]
+                total_reads_B = max_number_of_mapped_reads[B]
+                normalised_weight = ( (shared_reads / total_reads_A) + (shared_reads / total_reads_B) ) / 2
+                weighted_graph.add_edge(A, B, weight = normalised_weight)
+        return cls(weighted_graph)
+
+    def get_unconnected_nodes(self):
+        """[summary]
+        
+        Returns:
+            [type] -- [description]
+        """
+        unconnected_nodes = []
+        for node in self.G.nodes():
+            if len(list(nx.all_neighbors(self.G, node))) == 0:
+                unconnected_nodes.append(node)
         return unconnected_nodes
+    
+    def get_connected_nodes(self):
+        """ Returns all connected nodes in a graph as list """
+        connected_nodes = []
+        for node in self.G.nodes():
+            if len(list(nx.all_neighbors(self.G, node))) != 0:
+                connected_nodes.append(node)
+        return connected_nodes
 
-    def trim(self):
+    def remove_nodes(self, nodes):
         """
         Removes nodes from the graph that dont connect to other contigs. Returns contigs that are not connected.
         """
-        node_weights = {}
-        unconnected_nodes = self.unconnected_nodes()
-        for node in unconnected_nodes:
+        for node in nodes:
             self.G.remove_node(node)
-        return unconnected_nodes
 
     def calculate_node_weights(self):
         """
@@ -89,16 +159,11 @@ class ReadGraph():
         logger.debug(f'Node weights: {node_weights}')
         return node_weights
 
-    def unconnected_nodes(self):
-        """
-        Returns all unconnected nodes
-        """
-        node_weights = self.calculate_node_weights()
-        unconnected_nodes = []
-        for node, weight in node_weights.items():
-            if weight == 0:
-                unconnected_nodes.append(node)
-        return unconnected_nodes
+
+    def merge(self, graph):
+        """ Merges another graph into the existing one."""
+        H = nx.compose(self.G, nx.Graph(graph))
+        self.G = nx.Graph(H)
 
     def update_graph(self, contigs):
         """Updates the graph with new given contig objs. And trims the graph again.
@@ -107,6 +172,7 @@ class ReadGraph():
             contigs {[type]} -- [description]
         """
         logger.debug('Updating graph.')
+        logger.debug(f'{self.original_contigs}')
         for (existing_contig, new_contig) in itertools.product(self.original_contigs, contigs):
             overlap = len(existing_contig.readset.intersection(new_contig.readset))
             # Normalize the weight:
@@ -118,7 +184,12 @@ class ReadGraph():
                 weight = ( (overlap/mapped_reads_contig_A) + (overlap/mapped_reads_contig_B) ) / 2 
             except ZeroDivisionError:
                 weight = 0
-            self.G.add_edge(existing_contig.name, new_contig.name, weight = weight)
+
+            if weight > 0:
+                self.G.add_edge(existing_contig.name, new_contig.name, weight = weight)
+            else:
+                self.G.add_node(new_contig.name)
+
 
     def save_graph(self, filename):
         """
@@ -130,7 +201,7 @@ class ReadGraph():
             os.remove(filename)
         nx.write_weighted_edgelist(self.G, filename)
     
-    def extract_mcl_clusters(self, mcl_cluster_file, original_contigs=None):
+    def get_contigs_not_in_mcl_cluster(self, mcl_cluster_file, original_contigs=None):
         """
         Remove all contigs that don't have a connection to the original contigs.
         Returns all contigs that either:
@@ -139,7 +210,7 @@ class ReadGraph():
         """
         new_unlabeled_list = []
 
-        # Case 1
+        # The last group only contains unlabeled contigs to every  sequence is a original sequence.
         if original_contigs == None:
             original_cluster = set([contig.name for contig in self.original_contigs])
         else:
@@ -274,6 +345,12 @@ class ReadGraph():
         Returns the nodes in the graph.
         """
         return(list(self.G.nodes()))
+
+    def get_edges(self, data=False):
+        """
+        Returns the nodes in the graph.
+        """
+        return(list(self.G.edges(data=data)))
 
 
     # def calculate_alignments(self):

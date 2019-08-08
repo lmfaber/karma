@@ -22,11 +22,19 @@ class Contig():
         logger.debug(f'Creating new contig object...')
         with open(sam_file, 'r') as sam_reader:
             for line in sam_reader:
-                infos = line.split('\t')
-                name = infos[2]
-                read = infos[0]
-                position = infos[3]
+                read, _, name, position, *_ = line.split('\t')
                 # TODO: Check if this can be left out. Should be possible, because mapping took place on single contigs.
                 #if name == new_contig.name:
                 #    new_contig.add_read(read, position)
                 self.add_read(read, position)
+    
+    def load_from_iterator(self, sam_infos):
+        """Read the infos from iterator in RAM.
+        
+        Arguments:
+            sam_infos {[type]} -- [description]
+        """
+        for line in sam_infos:
+            read, _, name, position, *_ = line.split('\t')
+            self.add_read(read, position)
+            

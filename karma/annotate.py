@@ -8,30 +8,31 @@ from logs import logger
 
 
 class Dammit:
+    """ Perform de novo annotation with dammit. """
 
-    def __init__(self, first_file, second_file, output_dir, database_dir, busco_group, kmer_clusters, karma_clusters, representative_sequences, threads = 6):
+    def __init__(self, first_file, second_file, output_dir, kmer_clusters, karma_clusters, representative_sequences, threads = 6):
         self.transcriptomes = {'before': first_file, 'after': second_file}
         self.output_dir = output_dir
-        self.database_dir = database_dir
-        self.busco_group = busco_group
         self.kmer_clusters = kmer_clusters
         self.karma_clusters = karma_clusters
         self.threads = threads
         self.representative_sequences = set([a.lstrip('>') for a in representative_sequences])
 
+        self.database_dir = ''
+        self.busco_group = ''
+
         self.gff_files = {}
         self.namemaps = {}
 
-        # Metrics
-        # self.lost_genes = ()
-        # self.removed_sequences_per_gene = {}
-        # self.clusters_per_gene = {}
-        # self.sequences_per_gene = {}
-
-        # Run
-        self.update_database()
-        self.run()
-
+    def update_database(self, database_dir, busco_group):
+        """
+        Updates the dammit database.
+        """
+        logger.info('Update dammit database.')
+        self.database_dir = database_dir
+        self.busco_group = busco_group
+        database = Cmd(f'dammit databases --install --n_threads {self.threads} --database-dir {self.database_dir} --busco-group {self.busco_group}')
+        database.run()
 
     def run(self):
         """
@@ -48,14 +49,6 @@ class Dammit:
             if not os.path.exists(annotation_file) and not os.path.exists(namemap_file):
                 dammit = Cmd(f'dammit annotate {transcriptome} -o {output_dir} --database-dir {self.database_dir} --busco-group {self.busco_group} --n_threads {self.threads}')
                 dammit.run()
-
-    def update_database(self):
-        """
-        Updates the dammit database.
-        """
-        logger.info('Update dammit database.')
-        database = Cmd(f'dammit databases --install --database-dir {self.database_dir} --busco-group {self.busco_group}')
-        database.run()
 
     def postprocessing(self):
         """
@@ -82,8 +75,6 @@ class Dammit:
         sequences_per_gene = self.calculate_sequences_per_gene(BEFORE, AFTER)
         self.clusters_and_sequences_per_gene = self.combine_dicts(clusters_per_gene, sequences_per_gene)
 
-
-
     def calculate_sequences_per_gene(self, gene_dict_before, gene_dict_after):
         """Calculates how many sequences are per gene in the assembly.
         
@@ -94,8 +85,6 @@ class Dammit:
         Returns:
             [type] -- [description]
         """
-
-        
         A = {}
         for gene, transcripts in gene_dict_before.items():
             A[gene] = len(transcripts)
@@ -249,7 +238,6 @@ class Dammit:
         new_file = new_file.sort_values(by=['Name', 'transcript_id'])
         # dataframe_to_save = new_file[['transcript_id', 'Name']]
         new_file.to_csv(f'{self.output_dir}/genes_{suffix}.csv', sep='\t', columns=['transcript_id', 'Name'] )
-
 
         unique_genes = set(new_file['Name'])
 

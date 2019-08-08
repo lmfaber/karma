@@ -6,13 +6,10 @@ from logs import logger
 
 
 class Mcl:
-
+    """ Run MCL clustering on a given graph file. """
     def __init__(self):
         mcl = Cmd('which mcl')
         mcl.run()
-        if mcl.status != 0:
-            logger.error('MCL not found in path.')
-            exit(1)
 
     def run(self, graph_file, output_file, threads):
         """
