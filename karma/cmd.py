@@ -18,22 +18,26 @@ class Cmd:
         self.stderr = None
         self.status = None
     
-    def run(self):
-        """ Executes the command(s). """
+    def run(self, in_stream=None):
+        """ Executes the command(s).
+        
+        Keyword Arguments:
+            in_stream {str} -- Allows to pass a binary string as stdin for the first command. (default: {None})
+        """
         PIPE = subprocess.PIPE
         if self.pipeline:
             first_process = self.cmd[0]
             remaining_processes = self.cmd[1:]
 
-            proc_1 = subprocess.Popen(first_process, stdout=PIPE, stderr=PIPE)
+            first_process = subprocess.Popen(first_process, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+            stdout, stderr = first_process.communicate(input=in_stream)
             for process in remaining_processes:
-                proc = subprocess.Popen(process, stdin=proc_1.stdout, stdout=PIPE, stderr=PIPE)
-                proc_1.stdout.close()  # Allow p1 to receive a SIGPIPE if p2 exits.
-                proc_1 = proc     
+                proc = subprocess.Popen(process, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+                stdout, stderr = proc.communicate(input=stdout)
         else:
-            proc = subprocess.Popen(self.cmd, stdout=PIPE, stderr=PIPE)
+            proc = subprocess.Popen(self.cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+            stdout, stderr = proc.communicate(input=in_stream)
         
-        stdout, stderr = proc.communicate()
         self.stdout = stdout.decode()
         self.stderr = stderr.decode()
         self.status = proc.returncode

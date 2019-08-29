@@ -46,7 +46,7 @@ class Dammit:
             self.gff_files[name] = annotation_file
             namemap_file = f'{output_dir}/{os.path.basename(transcriptome)}.dammit.namemap.csv'
             self.namemaps[name] = namemap_file
-            if not os.path.exists(annotation_file) and not os.path.exists(namemap_file):
+            if not (os.path.exists(annotation_file) and os.path.exists(namemap_file)):
                 dammit = Cmd(f'dammit annotate {transcriptome} -o {output_dir} --database-dir {self.database_dir} --busco-group {self.busco_group} --n_threads {self.threads}')
                 dammit.run()
 
