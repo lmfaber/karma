@@ -1,6 +1,5 @@
 from logs import logger
 from cmd import Cmd
-import glob
 import os
 
 class Salmon:
@@ -18,7 +17,7 @@ class Salmon:
     def build_index(self):
         """ Build the salmon index. """
         logger.debug('Build salmon index.')
-        # TODO: implement check to avoid duplicate runs
+        # TODO: Implement check to avoid duplicate runs
         indexing = Cmd(f'salmon index -p {self.threads} -t {self.input_file} -i {self.index_name} --keepDuplicates')
         indexing.run()
 

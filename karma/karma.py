@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
-import glob
 import os
 import pickle
-import subprocess
 from cmd import Cmd
 from collections import OrderedDict
 import sys
@@ -31,14 +29,6 @@ def basename_woe(path):
     """ Basename without extension """
     return os.path.splitext(os.path.basename(path))[0]
 
-def save_contigs_in_separate_files(sequences, output_folder):
-    makedir(contig_dir)
-    for name, sequence in sequences.items():
-        file_name = f"{contig_dir}/{name.lstrip('>')}.fa"
-        with open(file_name, 'w') as fasta_writer:
-            fasta_writer.write(f'{name}\n')
-            fasta_writer.write(sequence)
-
 def read_fasta_file(fasta_file):
     """Reads a fasta file and saves the entries as OrderedDict from collections
     
@@ -61,74 +51,6 @@ def read_fasta_file(fasta_file):
         sequences[seq_name] = sequence
     logger.debug(f'Read {len(sequences)} sequences in total.')
     return(sequences)
-
-def runner(contig_name, mapper):
-    logger.debug(f'Mapping and saving {contig_name}')
-    mapper.build_index()
-    sam_info = mapper.run(READS)
-    contig_obj = Contig(contig_name)
-    contig_obj.load_from_iterator(sam_info)
-
-    contig_pickle_file = f'{contig_dir}/{contig_name}.pickle'
-    with open(contig_pickle_file, 'wb') as writer:
-        pickle.dump(contig_obj, writer)
-    return (contig_name, contig_obj)
-
-def build_mapping_objects(n, total, contig_name, mapping_threads):
-    logger.debug(f'{n}/{total}')
-    # If mapping was already done load the pickle file.
-    contig_pickle_file = f'{contig_dir}/{contig_name}.pickle'
-
-    if os.path.exists(contig_pickle_file):
-        # TODO: Better method for checking the file.
-        with open(contig_pickle_file, 'rb') as reader:
-            contig_obj = pickle.load(reader)
-            mapping_obj = None
-    else:
-        contig_file = f'{contig_dir}/{contig_name}.fa'
-        index_name = f'{index_dir}/{contig_name}'
-        mapping_obj = Hisat2(input_file=contig_file, index_name=index_name, threads=mapping_threads)
-        contig_obj = None
-    return (contig_name, contig_obj, mapping_obj)
-
-def perform_mappings(contigs, contig_dir, index_dir, threads):
-    """Create all contig objects either trough mapping or loading from existing files.
-    
-    Arguments:
-        contig_paths {[type]} -- [description]
-        index_dir {[type]} -- [description]
-        mapping_dir {[type]} -- [description]
-    """
-    contig_names = [name.lstrip('>') for name in contigs.keys()]
-    contig_objs = {}
-    mappings = []
-
-    if threads <= 5:
-        pool_threads = 1
-        mapping_threads = 1
-        logger.warning("This may take forever. Please use more threads...")
-    else:
-        # pool_threads = 5
-        # mapping_threads = (threads // pool_threads)
-        pool_threads = 10
-        mapping_threads = 2
-
-    total = len(contig_names)
-    with Pool(threads) as pool:
-        arguments = ((i, total, contig_name, mapping_threads) for (i, contig_name) in enumerate(contig_names))
-        for (contig_name, contig_obj, mapping_obj) in pool.starmap(build_mapping_objects, arguments):
-            if contig_obj:
-                contig_objs[contig_name] = contig_obj
-            if mapping_obj:
-                mappings.append(mapping_obj)
-
-    logger.info(f"Perform a whopping amount of {len(mappings)} mappings. Here we go.")
-    with Pool(pool_threads) as pool:
-        arguments = ((con, mapp) for (con, mapp) in zip(contig_names, mappings))
-        for (contig_name, contig_obj) in pool.starmap(runner, arguments):
-            contig_objs[contig_name] = contig_obj
-
-    return contig_objs
     
 def flatten(lst):
 	return sum( ([x] if not isinstance(x, list) else flatten(x) for x in lst), [] )
@@ -155,7 +77,7 @@ def create_lookup_dict(clusters_with_subcluster, sequences):
 
     # Check if dictionary is okay.
     length_of_dict = sum( [len(subcluster['mcl_subcluster']) for subcluster in mcl_subclusters.values()] )
-    logger.info(f"length of dict: {length_of_dict}, {len(sequences)}")
+    logger.debug(f"length of dict: {length_of_dict}, {len(sequences)}")
     assert length_of_dict == len(sequences), 'The creation of the lookup dictionary went wrong.'
     return mcl_subclusters
 
@@ -214,63 +136,71 @@ def add_remaining_kmer_based_clusters(mcl_subclusters):
     remaining_cluster.append(new_subgroup)
     return remaining_cluster
 
+
 if __name__ == "__main__":
 
     ####             ####
     ## output folders ###
     ####             ####
     BASENAME = basename_woe(args.FASTA_FILE)
-    contig_dir = f'{args.OUTPUT_DIR}/contigs'          # Saved single contigs
+
     kmer_dir = f'{args.OUTPUT_DIR}/kmer'               # Kmer based clustering
     mapping_dir = f'{args.OUTPUT_DIR}/salmon/mapping'  # Sam files from mapping
     index_dir = f'{args.OUTPUT_DIR}/salmon/index'      # Index files for mapping
     graph_dir = f'{args.OUTPUT_DIR}/graphs'            # abc-graph
-    graph_visual_dir = f'{graph_dir}/visual'                     # plotted graphs
-    mcl_dir = f'{args.OUTPUT_DIR}/mcl'                 # mcl clustering results
-    output_dir = f'{args.OUTPUT_DIR}/karma'                             # actual results
+    graph_visual_dir = f'{graph_dir}/visual'           # plotted graphs
     dammit_dir = f'{args.OUTPUT_DIR}/dammit'           # de novo annotation results
 
-    # Create all output directories
-    directories = [kmer_dir, mapping_dir, index_dir, graph_dir, graph_visual_dir, mcl_dir, output_dir, dammit_dir]
+    # Create all relevant output directories
+    directories = [kmer_dir, mapping_dir, index_dir]
+    if args.DRAW:
+        directories.append(graph_visual_dir)
+        directories.append(graph_dir)
+    if args.ANNOTATE:
+        directories.append(dammit_dir)
     [makedir(dir) for dir in directories]
 
-    save_options(f"{output_dir}/parameters.txt")
+    save_options(f"{args.OUTPUT_DIR}/parameters.txt")
 
     sequences = read_fasta_file(args.FASTA_FILE)
-
-    # Split all contigs in separate file.
-    # save_contigs_in_separate_files(sequences, contig_dir)
-
 
     ####             ####
     ## kmer clustering ##
     ####             ####
     logger.info('Starting kmer based clustering.')
 
-    cluster_output = f'{kmer_dir}/{BASENAME}.txt'
+    k = KmerClustering(sequences = sequences, 
+                        output_dir = kmer_dir, 
+                        kmer_size=args.KMER_SIZE, 
+                        threads = args.THREADS)
 
-    k = KmerClustering(sequences = sequences, output_file = cluster_output, kmer_size=args.KMER_SIZE, threads = args.THREADS)
+    k.run(neighbors=args.N_NEIGHBORS, 
+            components=args.N_COMPONENTS, 
+            dist=args.MIN_DIST, 
+            r_state=args.RANDOM_STATE,
+            min_cluster_size=args.MIN_CLUSTER_SIZE)
+
     labeled_contigs = k.clusters
     unlabeled_contigs = k.unlabeled_cluster[0]
 
     logger.debug(f'LABELED: {labeled_contigs}')
     logger.debug(f'NOT LABELED: {unlabeled_contigs}')
 
-
     ####     ####
     ## Mapping ##
     ####     ####
-    logger.info('Starting mapping...')
     if args.R:
         READS = [args.R]
     else:
         READS = [args.R1, args.R2]
 
-    # Perfrom salmon mapping.
     logger.info('Salmon mapping...')
-    salmon = Salmon(args.FASTA_FILE, mapping_dir, index_dir, args.THREADS)
+    salmon = Salmon(input_file=args.FASTA_FILE, 
+                    output_dir=mapping_dir, 
+                    index_name=index_dir, 
+                    threads=args.THREADS)
     salmon.build_index()
-    salmon.run(READS)
+    salmon.run(reads=READS)
 
     eqc_file = f'{mapping_dir}/aux_info/eq_classes.txt'
 
@@ -278,7 +208,6 @@ if __name__ == "__main__":
     logger.info('Build full graph...')
     full_graph = ReadGraph.from_equivalence_classes(eqc_file)
     # full_graph.save_graph(f"{output_dir}/full_graph_edges.txt")
-
 
     ## Extract all subclusters, remove single contigs and save remaining contigs in a list.
     logger.info('Trim kmer based clusters...')
@@ -362,7 +291,7 @@ if __name__ == "__main__":
 
         unlabeled_contigs = unconnected_contigs + non_mcl_cluster_contigs
 
-        cluster_representative_sequences += cluster_graph.calculate_representative_sequences(lowest=True)
+        cluster_representative_sequences += cluster_graph.calculate_representative_sequences(lowest=args.LOWEST)
 
         clusters_with_subcluster.append(cluster_graph.mcl_cluster)
         logger.debug(f"MCL CLUSTER: {cluster_graph.mcl_cluster}")
@@ -407,7 +336,7 @@ if __name__ == "__main__":
     assert len(flatten(clusters_with_subcluster)) == len(sequences)
 
     clustered_sequence_names = []
-    unlabeled_representative_sequences = cluster_graph.calculate_representative_sequences(lowest=True)
+    unlabeled_representative_sequences = cluster_graph.calculate_representative_sequences(lowest=args.LOWEST)
     leftover_names = [f'>{name[0][0]}' for name in leftover]
     clustered_sequence_names = unlabeled_representative_sequences + cluster_representative_sequences 
     clustered_sequence_names += leftover_names
@@ -415,38 +344,42 @@ if __name__ == "__main__":
     ####                ####
     ## Rearrange clusters ##
     ####                ####
-    logger.info('Rearrange clusters.')
-    # logger.info(clusters_with_subcluster)
+    if args.REARRANGE:
+        logger.info('Rearrange clusters.')
+        # logger.info(clusters_with_subcluster)
 
-    mcl_subclusters = create_lookup_dict(clusters_with_subcluster, sequences)
-    mcl_groups_to_combine = calc_connections_between_mcl_subclusters(mcl_subclusters)
+        mcl_subclusters = create_lookup_dict(clusters_with_subcluster, sequences)
+        mcl_groups_to_combine = calc_connections_between_mcl_subclusters(mcl_subclusters, weight_cutoff=args.THRESHOLD)
 
-    # New object that stores the new clusters with subclusters in a nested array list.
-    new_cluster_subcluster = []
+        # New object that stores the new clusters with subclusters in a nested array list.
+        new_cluster_subcluster = []
 
-    # Combine those clusters that belong together.
-    new_cluster_subcluster += combine_connected_subclusters(mcl_subclusters, mcl_groups_to_combine)
+        # Combine those clusters that belong together.
+        new_cluster_subcluster += combine_connected_subclusters(mcl_subclusters, mcl_groups_to_combine)
 
-    # Remove already added clusters from lookup dict
-    mcl_subclusters = remove_already_added_clusters(from_dict=mcl_subclusters, remove=set(flatten(mcl_groups_to_combine)) )
+        # Remove already added clusters from lookup dict
+        mcl_subclusters = remove_already_added_clusters(from_dict=mcl_subclusters, remove=set(flatten(mcl_groups_to_combine)) )
 
-    # Add remaining clusters according to the kmer based clustering.
-    new_cluster_subcluster += add_remaining_kmer_based_clusters(mcl_subclusters)
+        # Add remaining clusters according to the kmer based clustering.
+        new_cluster_subcluster += add_remaining_kmer_based_clusters(mcl_subclusters)
 
-    assert(len(flatten(new_cluster_subcluster)) == len(sequences)), 'rearraning groups went wrong.'
+        assert(len(flatten(new_cluster_subcluster)) == len(sequences)), 'rearraning groups went wrong.'
+    else:
+        new_cluster_subcluster = clusters_with_subcluster
+
 
     ####    ####
     ## Output ##
     ####    ####
 
     # Write fasta file
-    fasta_output_file = f'{output_dir}/{BASENAME}.fa'
+    fasta_output_file = f'{args.OUTPUT_DIR}/{BASENAME}.fa'
     sequences_to_write = {name: sequences[name] for name in clustered_sequence_names}
     writer = Writer(fasta_output_file)
     writer.write_fasta(sequences_to_write)
 
     # Write clstr file
-    clstr_output_file = f'{output_dir}/{BASENAME}.clstr'
+    clstr_output_file = f'{args.OUTPUT_DIR}/{BASENAME}.clstr'
     writer = Writer(clstr_output_file)
     writer.write_clstr(new_cluster_subcluster, clustered_sequence_names)
 
@@ -470,5 +403,5 @@ if __name__ == "__main__":
         dammit.run()
         dammit.postprocessing()
 
-        eval_output_file = f'{output_dir}/{BASENAME}.csv'
+        eval_output_file = f'{args.OUTPUT_DIR}/{BASENAME}.csv'
         dammit.save(eval_output_file)

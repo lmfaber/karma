@@ -11,138 +11,14 @@ import umap
 from logs import logger
 
 
-def cdhit_like_output(sequence_ids, sequences, cluster_ids, probabilities, filename='cluster'):
-    """    Creates a cd-hit-est like output for the clusters from umap and hdbscan
-
-    Arguments:
-        sequence_ids {[type]} -- [description]
-        cluster {[type]} -- [description]
-
-    Keyword Arguments:
-        filename {str} -- Output filename (default: {'cluster'})
-    """
-
-    with open(f'{filename}.clstr', 'w') as writer, open(f'{filename}_no_classfication.clstr', 'w') as no_cluster_writer:
-        unique_cluster = sorted(set(cluster_ids))
-        logger.debug(f'Write {len(unique_cluster) - 1} cluster.')
-        for cluster_id, cl in enumerate(unique_cluster):
-            internal_cluster_counter = 0
-            if cl == -1:
-                no_cluster_writer.write(f'>Cluster {cluster_id}\n')
-            else:
-                writer.write(f'>Cluster {cluster_id}\n')
-            clustered_sequences = []
-            for sequence_id, sequence, cluster_no, probability in zip(sequence_ids, sequences, cluster_ids, probabilities):
-                if cluster_no == cl:
-                    clustered_sequences.append( (len(sequence), sequence_id, round(probability*100.0, 2)) )
-            sorted_by_length = sorted(clustered_sequences, key = lambda x: x[0])
-
-            for sequence_length, sequence_id, probability in sorted_by_length:
-                # Either write to no cluster file or the cluster file
-                if cl == -1:
-                    no_cluster_writer.write(f'{internal_cluster_counter}\t{sequence_length}nt, {sequence_id}... at {probability}%\n')
-                else:
-                    writer.write(f'{internal_cluster_counter}\t{sequence_length}nt, {sequence_id}... at {probability}%\n')
-                internal_cluster_counter += 1
-
-def kmers_of_seq(sequence, kmer_size, palindromic=False):
-    """
-    Returns all kmers of length n from a given sequence.
-    
-    Arguments:
-        sequence {str} -- Input sequence.
-    
-    Keyword Arguments:
-        kmer_size {int} -- Kmer size
-    """
-    for i in range(len(sequence)-kmer_size+1):
-        if not palindromic:
-            yield(sequence[i:i+kmer_size])
-        else:
-            tmp_seq = sequence[i:i+kmer_size]
-            if is_palindrome(tmp_seq):
-                yield(tmp_seq)
-
-def is_palindrome(sequence):
-    """
-    Checks if sequence in palindrome.
-    
-    Arguments:
-        sequence {str} -- Input string.
-    """
-    return sequence == sequence[::-1]
-
-def complement_sequence(sequence):
-    """Complements a DNA sequence
-    
-    Arguments:
-        sequence {str} -- DNA string
-    """
-    complement_dict = {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C', 'N': 'N'}
-    return( ''.join([complement_dict[N] for N in sequence]) )
-
-def reverse_complement_sequence(sequence):
-    """Reverse complements a DNA sequence
-    
-    Arguments:
-        sequence {str} -- DNA string
-    """
-    compl = complement_sequence(sequence)
-    return( compl[::-1] )
-
-def count_kmer_occurence(sequences, kmer_size):
-    """Counts actually appearing kmers in list of sequences and returns a list of Counter objects.
-    
-    Arguments:
-        sequences {dictionary} -- Dictionary where the sequences are the values.
-    """
-    logger.debug('Count ALL kmers per sequence...')
-
-    # Save them in a ordered way, otherwise the clustering wont work.
-    counts = []
-    for sequence in sequences.values():
-        c = Counter()
-
-        if kmer_size == '5p6':
-            # 5-mers
-            k = 5
-            for i in range(len(sequence)-k+1):
-                c[sequence[i:i+k]] += 1
-
-            # 6p-mers
-            k = 6
-            for i in range(len(sequence)-k+1):
-                tmp_seq = sequence[i:i+k]
-                if is_palindrome(tmp_seq):
-                    c[sequence[i:i+k]] += 1
-            counts.append(c)
-
-        else:
-            for i in range(len(sequence)-kmer_size+1):
-                c[sequence[i:i+kmer_size]] += 1
-            counts.append(c)
-
-    assert len(counts) == len(sequences), 'Something went wrong while counting kmers. Exiting...'
-    
-    return counts 
-
-def mask_list(list_to_mask, mask):
-
-    labeled = []
-    unlabeled = []
-    for i in set(mask):
-        positions = (j for j, k in enumerate(mask) if k == i)
-        if i == -1:
-            unlabeled.append( [list(list_to_mask.keys())[c].lstrip('>') for c in positions] )
-        else:
-            labeled.append( [list(list_to_mask.keys())[c].lstrip('>') for c in positions] )
-    return(labeled, unlabeled)
-
 class KmerClustering():
 
-    def __init__(self, sequences, output_file, kmer_size, threads = 2,):
+    def __init__(self, sequences, output_dir, kmer_size, threads):
         self.sequences = sequences
-        self.output_file = output_file
+        self.output_dir = output_dir
+        self.output_eval = f"{self.output_dir}/eval.txt"
+        self.output_file = f"{self.output_dir}/cluster.txt"
+
         self.threads = threads
         self.kmer_size = kmer_size
 
@@ -150,15 +26,68 @@ class KmerClustering():
         self.unlabeled_cluster = []
         self.kmers = None
         self.sorted_kmer_set = set()
-
-        if os.path.isfile(self.output_file):
-            logger.info(f'Read from previous calculation: {self.output_file}')
-            self.read_clusters()
-        else:
-            self.run()
-        self.__fix_fasta_headers()
         
+    @staticmethod
+    def __mask_list(list_to_mask, mask):
+        """ Return only specifid items from a list according to a mask. """
+        labeled = []
+        unlabeled = []
+        for i in set(mask):
+            positions = (j for j, k in enumerate(mask) if k == i)
+            if i == -1:
+                unlabeled.append( [list(list_to_mask.keys())[c].lstrip('>') for c in positions] )
+            else:
+                labeled.append( [list(list_to_mask.keys())[c].lstrip('>') for c in positions] )
+        return(labeled, unlabeled)
+
+    @staticmethod
+    def __is_palindrome(sequence):
+        """
+        Checks if sequence in palindrome.
+        
+        Arguments:
+            sequence {str} -- Input string.
+        """
+        return sequence == sequence[::-1]
+
+    def __count_kmer_occurence(self, sequences, kmer_size):
+        """Counts actually appearing kmers in list of sequences and returns a list of Counter objects.
+        
+        Arguments:
+            sequences {dictionary} -- Dictionary where the sequences are the values.
+        """
+        logger.debug('Count ALL kmers per sequence...')
+
+        # Save them in a ordered way, otherwise the clustering wont work.
+        counts = []
+        for sequence in sequences.values():
+            c = Counter()
+
+            if kmer_size == '5p6':
+                # 5-mers
+                k = 5
+                for i in range(len(sequence)-k+1):
+                    c[sequence[i:i+k]] += 1
+
+                # 6p-mers
+                k = 6
+                for i in range(len(sequence)-k+1):
+                    tmp_seq = sequence[i:i+k]
+                    if self.__is_palindrome(tmp_seq):
+                        c[sequence[i:i+k]] += 1
+                counts.append(c)
+
+            else:
+                for i in range(len(sequence)-kmer_size+1):
+                    c[sequence[i:i+kmer_size]] += 1
+                counts.append(c)
+
+        assert len(counts) == len(sequences), 'Something went wrong while counting kmers. Exiting...'
+        
+        return counts
+
     def __fix_fasta_headers(self):
+        """ Renames fasta header. Splits the sequence name at the first space. """
         logger.debug(f'unlabeled: {self.unlabeled_cluster}')
         self.unlabeled_cluster = [[name.split(' ')[0] for name in self.unlabeled_cluster[0]]]
         renamed_cluster = []
@@ -179,11 +108,11 @@ class KmerClustering():
         for kmer, count in contig.items():
             col = self.kmers[kmer]
             # Normalize kmer appearance to length of sequence
-            # posCounts.append((row, col, count/length))
-            posCounts.append((row, col, count))
+            posCounts.append((row, col, count/length))
+            # posCounts.append((row, col, count))
         return(posCounts)
 
-    def save_groups_to_file(self):
+    def __save_groups_to_file(self):
         """
         Saves the names of contigs from labeled clusters and unlabeled clusters into one file. Names are tab separated.
         The first line contains the unlabeled contigs.
@@ -194,7 +123,7 @@ class KmerClustering():
             for cluster in self.clusters:
                 cluster_writer.write('\t'.join(cluster) + '\n')
 
-    def read_clusters(self):
+    def __read_clusters(self):
         """
         Reads existing cluster from previous runs.
         """
@@ -203,7 +132,7 @@ class KmerClustering():
             for line in cluster_reader:
                 self.clusters.append(line.rstrip('\n').split('\t'))
 
-    def extract_kmers(self, sequences, kmer_size):
+    def __extract_kmers(self, sequences, kmer_size):
         """Extracts all kmers from a list of sequences.
         
         Arguments:
@@ -215,22 +144,20 @@ class KmerClustering():
         if kmer_size == '5p6':
             # Add 5-mers
             for sequence in sequences.values():
-                for k in kmers_of_seq(sequence, 5, palindromic=False):
+                for k in self.__kmers_of_seq(sequence, 5, palindromic=False):
                     kmer_set.add(k)
 
             # Add palindromic 6-mers
             for sequence in sequences.values():
-                for k in kmers_of_seq(sequence, 6, palindromic=True):
+                for k in self.__kmers_of_seq(sequence, 6, palindromic=True):
                     kmer_set.add(k)
 
         else:
             logger.info(f'Accounting only {kmer_size}-mers.')
             for sequence in sequences.values():
-                for k in kmers_of_seq(sequence, kmer_size, palindromic=False):
+                for k in self.__kmers_of_seq(sequence, kmer_size, palindromic=False):
                     kmer_set.add(k)
 
-
-        # logger.debug(f'No of {KMER_SIZE}-mers: {len(kmer_set)}')
         self.sorted_kmer_set = sorted(kmer_set)
         kmer_set.clear()
 
@@ -240,17 +167,36 @@ class KmerClustering():
         logger.debug(f'Dict has {len(kmer_dict)} entries.')
         return( kmer_dict )
 
-    def run(self):
+    def __kmers_of_seq(self, sequence, kmer_size, palindromic=False):
+        """
+        Returns all kmers of length n from a given sequence.
+        
+        Arguments:
+            sequence {str} -- Input sequence.
+        
+        Keyword Arguments:
+            kmer_size {int} -- Kmer size
+        """
+        for i in range(len(sequence)-kmer_size+1):
+            if palindromic:
+                tmp_seq = sequence[i:i+kmer_size]
+                if self.__is_palindrome(tmp_seq):
+                    yield(tmp_seq)
+            else:
+                yield(sequence[i:i+kmer_size])
+
+    def __calc_kmer_profile(self):
+        """ Calculate kmer profile. """
         ## 2. Extract kmers from sequences. Using sets. Dictionary! Used in fill_array for  function
-        self.kmers = self.extract_kmers(self.sequences, kmer_size=self.kmer_size)
+        self.kmers = self.__extract_kmers(self.sequences, kmer_size=self.kmer_size)
 
         # Initialize empty numpy array:
         logger.debug('Initialize empty numpy array...')
         kmer_profile = np.zeros(shape=(len(self.sequences), len(self.kmers)), dtype=np.float)
 
         ## 3. Count all accourences of kmers in each contig
-        counts = count_kmer_occurence(self.sequences, kmer_size=self.kmer_size)
-
+        counts = self.__count_kmer_occurence(self.sequences, kmer_size=self.kmer_size)
+        
         lengths_of_sequences = (len(seq) for seq in self.sequences)
 
         logger.debug(f'Calculate position and counts with {self.threads} cores.')
@@ -260,9 +206,7 @@ class KmerClustering():
             for i in pool.starmap(self.fill_array_for_contig, ((row, countObj, length) for row, (countObj, length) in enumerate(zip(counts, lengths_of_sequences)) ) ):
                 pcount += i
 
-        logger.debug(f'Size of pcount: {sys.getsizeof(pcount)}')
-
-        logger.info('Change entries in numpy array...')
+        logger.debug('Change entries in numpy array...')
         for i in pcount:
             row, col, count =  i[0], i[1], i[2]
             kmer_profile[row][col] = count
@@ -275,30 +219,66 @@ class KmerClustering():
                 logger.error(f'Values of column {n} are all zero, which should not be the case.')
                 logger.debug(f'Problematic kmer: {self.sorted_kmer_set[n]}\n{kmer_profile[:,n]}')
                 exit(1)
+
+        # Sanity check: All rows should not be all zeros
+        for n in range(kmer_profile.shape[0]):
+            try:
+                assert np.any(kmer_profile[n,:])
+            except AssertionError:
+                logger.error(f'Values of row {n} are all zero, which should not be the case.')
+                exit(1)
         self.sorted_kmer_set.clear()
 
         logger.debug(f'KMER-PROFILE - Size: {sys.getsizeof(kmer_profile)}, Shape: {kmer_profile.shape}')
+        return kmer_profile
 
+    def __write_eval_information(self, **kwargs):
+        """ Writes the parameters and the mean probability for the cluster results in the evaluation file. """
+        with open(f'{self.output_eval}', 'w') as writer:
+            header = '\t'.join(list(kwargs.keys()))
+            writer.write(header + '\n')
+            values = '\t'.join( [str(a) for a in list(kwargs.values())] )
+            writer.write(values + '\n')
 
-        ## 4. dimension reduction with umap
-        logger.info('Dimension reduction with UMAP.')
-        neighbors = 2
-        components = 10
-        dist = 0
-        reducer = umap.UMAP(n_neighbors=neighbors, n_components=components, min_dist=dist, random_state=42).fit_transform(kmer_profile)
+    def run(self, neighbors, components, dist, r_state, min_cluster_size):
+        if os.path.isfile(self.output_file):
+            logger.info(f'Read from previous calculation: {self.output_file}')
+            self.__read_clusters()
+        else:
+            ## 1. Calculate kmer profile for each sequence
+            logger.info('Calculate kmer profiles.')
+            kmer_profile = self.__calc_kmer_profile()
 
-        ## 5. HDBSCAN
-        min_cluster_size = 2
-        logger.info(f'Clustering with HDBSCAN.\n\tMin cluster size: {min_cluster_size}')
-        clusterer = hdbscan.HDBSCAN(min_cluster_size = min_cluster_size).fit(reducer)
+            ## 2. Reduce the dimension with UMAP
+            logger.info('Dimension reduction with UMAP.')
+            reducer = umap.UMAP(n_neighbors=neighbors, 
+                                n_components=components, 
+                                min_dist=dist, 
+                                random_state=r_state).fit_transform(kmer_profile)
 
-        self.clusters, self.unlabeled_cluster = mask_list(self.sequences, clusterer.labels_)
-        logger.debug(f'Cluster labels: {clusterer.labels_}')
+            ## 3. Perform clustering using HDBSCAN
+            logger.info(f'Perform clustering with HDBSCAN. (min_cluster_size: {min_cluster_size})')
+            if min_cluster_size == 1:
+                clusterer = hdbscan.HDBSCAN(allow_single_cluster = True).fit(reducer)
+            else:
+                clusterer = hdbscan.HDBSCAN(min_cluster_size = min_cluster_size).fit(reducer)
 
-        ## Save to file 
-        self.save_groups_to_file()
+            self.clusters, self.unlabeled_cluster = self.__mask_list(self.sequences, clusterer.labels_)
 
+            ## Save to file 
+            self.__save_groups_to_file()
 
-        # bname = os.path.splitext(os.path.basename(inFile))[0]
-        # f = f'{bname}_allow_single_cluster_k{KMER_SIZE}_min{min_cluster_size}'
-        # cdhit_like_output(sequence_names, sequences, clusterer.labels_, clusterer.probabilities_, filename=f)
+            no_unlabeled = list(clusterer.labels_).count(-1)
+            no_groups = max(clusterer.labels_) + 1
+            mean_probability = np.mean(clusterer.probabilities_)
+            self.__write_eval_information(kmer_size=self.kmer_size,
+                                            n_neighbors=neighbors,
+                                            n_components=components,
+                                            min_dist=dist,
+                                            random_state=r_state,
+                                            min_cluster_size=min_cluster_size,
+                                            unlabeled=no_unlabeled,
+                                            no_groups=no_groups,
+                                            mean_probability=mean_probability)
+
+        self.__fix_fasta_headers()
