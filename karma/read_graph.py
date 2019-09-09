@@ -47,7 +47,7 @@ class ReadGraph(nx.Graph):
         self.original_contigs = original_contigs
 
     @classmethod
-    def from_equivalence_classes(cls, equivalence_class_file):
+    def from_equivalence_classes(cls, equivalence_class_file, sequences_from_fasta):
         """Builds the ReadGraph from a Salmon equivalence class file.
         
         Arguments:
@@ -114,6 +114,13 @@ class ReadGraph(nx.Graph):
                 weighted_graph.add_edge(A, B, weight = normalized_weight)
 
         assert len(weighted_graph.nodes()) == no_of_contigs
+
+        # Add sequences that are not present in the equivalence class file
+        original_sequence_names = set([name.lstrip('>') for name in sequences_from_fasta.keys()])
+        difference = original_sequence_names.difference(set(weighted_graph.nodes())) # Missing contigs
+        for missing_node in difference: # Add missing contigs
+            weighted_graph.add_node(missing_node)
+        assert len(weighted_graph.nodes()) == len(sequences_from_fasta), "The read graph has not enough nodes. Maybe Salmon could couldn't add all contigs to a equivalence class"
 
         return cls(incoming_graph_data=weighted_graph)
 
@@ -252,9 +259,9 @@ class ReadGraph(nx.Graph):
                 not_connected_to_original_contigs += list(line)
             else:
                 self.mcl_cluster.append(list(line))
-        if len(self.mcl_cluster) == 0:
-            logger.debug('MCL CLUSTER IS EMPTY')
-            self.mcl_cluster = [[seq] for seq in original_cluster]
+        # if len(self.mcl_cluster) == 0:
+        #     logger.debug('MCL CLUSTER IS EMPTY')
+        #     self.mcl_cluster = [[seq] for seq in original_cluster]
 
         return not_connected_to_original_contigs
 

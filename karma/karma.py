@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import os
-import pickle
 from cmd import Cmd
 from collections import OrderedDict
 import sys
@@ -206,7 +205,7 @@ if __name__ == "__main__":
 
     # Create full graph and take subgraph for clustering
     logger.info('Build full graph...')
-    full_graph = ReadGraph.from_equivalence_classes(eqc_file)
+    full_graph = ReadGraph.from_equivalence_classes(eqc_file, sequences)
     # full_graph.save_graph(f"{output_dir}/full_graph_edges.txt")
 
     ## Extract all subclusters, remove single contigs and save remaining contigs in a list.
@@ -322,17 +321,22 @@ if __name__ == "__main__":
     cluster_graph.get_contigs_not_in_mcl_cluster_stdout(mcl_result, original_contigs=unlabeled_contigs)
     logger.debug(f"LAST GRAPH, mcl: {cluster_graph.mcl_cluster}")
     logger.debug(f"LAST GRAPH, unconncected: {cluster_graph.get_unconnected_nodes()}")
+    logger.debug(f"mcl result: {mcl_result}")
 
+    # Add those remaining contigs that from a cluster
     for mcl in cluster_graph.mcl_cluster:
         clusters_with_subcluster.append([mcl])
-    # clusters_with_subcluster.append(cluster_graph.mcl_cluster)
-
+    
+    # Add those remaining contigs that do NOT form a cluster.
     leftover = [[[singles]] for singles in cluster_graph.get_unconnected_nodes()]
-    if cluster_graph.get_unconnected_nodes() !=0:
+    if len(cluster_graph.get_unconnected_nodes()) != 0:
         clusters_with_subcluster += leftover
 
-    logger.debug(f"Clusters with subcluster: {clusters_with_subcluster}")
-    logger.debug(leftover)
+    logger.debug(f"len last cluster mcl: {len(cluster_graph.mcl_cluster)} ")
+    # logger.debug(f"Clusters with subcluster: {clusters_with_subcluster}")
+    logger.debug(f"len leftover: {len(leftover)}")
+    logger.debug(len(flatten(clusters_with_subcluster)))
+    logger.debug(len(sequences))
     assert len(flatten(clusters_with_subcluster)) == len(sequences)
 
     clustered_sequence_names = []

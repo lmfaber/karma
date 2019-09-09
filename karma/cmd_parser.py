@@ -105,7 +105,7 @@ group_mcl.add_argument('--inflation',
                         dest='INFLATION', 
                         type=float, 
                         metavar='INT', 
-                        default=1.4, 
+                        default=2, 
                         help='Sets the main inflation value to INT. This value is the main handle for affecting cluster granularity. Between 1.2 and 6.')
 
 # Dammit annotation options
