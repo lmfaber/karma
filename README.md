@@ -1,8 +1,9 @@
 # karma
-[![Install with conda](https://anaconda.org/lmfaber/karma/badges/installer/conda.svg)](https://anaconda.org/lmfaber/karma)
-Kmers And Read MAppings are used to optimize (de novo) transcriptome assemblies.
+Using Kmers And Read MAppings to optimize (de novo) transcriptome assemblies.
 
 ## Installation
+[![Install with conda](https://anaconda.org/lmfaber/karma/badges/installer/conda.svg)](https://anaconda.org/lmfaber/karma)
+
 ```
 conda install -c bioconda -c conda-forge -c lmfaber karma
 ```
