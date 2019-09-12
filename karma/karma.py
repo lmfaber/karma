@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+from numba.errors import NumbaDeprecationWarning, NumbaPendingDeprecationWarning, NumbaWarning
+import warnings
+warnings.simplefilter('ignore', category=NumbaDeprecationWarning)
+warnings.simplefilter('ignore', category=NumbaPendingDeprecationWarning)
+warnings.simplefilter('ignore', category=NumbaWarning)
+
 import os
 from cmd import Cmd
 from collections import OrderedDict

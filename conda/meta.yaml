@@ -1,0 +1,21 @@
+package:
+ name: karma	
+ version: "0.1.0"
+
+source:
+  folder: karma
+  git_url: https://github.com/lmfaber/karma.git
+
+requirements:
+ run:
+  - hdbscan==0.8.22
+  - mcl==14.137
+  - networkx==2.3
+  - salmon==0.14.1
+  - umap-learn==0.3.9
+  - python==3.6.8
+  - dammit==1.0
+
+about:
+ license: GNU General Public License v3.0 
+ license_file: license.txt
