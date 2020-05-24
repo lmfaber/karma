@@ -6,10 +6,12 @@ logger.setLevel(logging.INFO)
 
 # Set the logging output to the desired format.
 # https://docs.python.org/3.7/library/logging.html#logrecord-attributes
-formatter = logging.Formatter('{asctime} [{levelname}]: {message}', datefmt='%Y-%m-%d %H:%M:%S', style='{')
+formatter = logging.Formatter(
+    "{asctime} [{levelname}]: {message}", datefmt="%Y-%m-%d %H:%M:%S", style="{"
+)
 
 # Log to a file. Log only warning to the log file.
-file_handler = logging.FileHandler('karma.log')
+file_handler = logging.FileHandler("karma.log")
 file_handler.setFormatter(formatter)
 file_handler.setLevel(logging.WARNING)
 logger.addHandler(file_handler)
