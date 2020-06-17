@@ -18,11 +18,11 @@ class Cmd:
         self.stderr = None
         self.status = None
     
-    def run(self, in_stream=None):
-        """ Executes the command(s).
-        
-        Keyword Arguments:
-            in_stream {str} -- Allows to pass a binary string as stdin for the first command. (default: {None})
+    def run(self, in_stream=None) -> None:
+        """Executes the command(s).
+
+        Args:
+            in_stream: Allows to pass a binary string as stdin for the first command. (default: {None})
         """
         PIPE = subprocess.PIPE
         if self.pipeline:
@@ -43,7 +43,8 @@ class Cmd:
         self.status = proc.returncode
         self.__check_command()
     
-    def __check_command(self):
+    def __check_command(self) -> None:
+        """Check if a command failed."""
         if self.status != 0:
             logger.error(f'Command failed: {self.cmd}')
             logger.error(self.stderr)
