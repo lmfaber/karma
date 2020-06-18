@@ -1,12 +1,12 @@
 from logs import logger
 from cmd import Cmd
 import glob
-import os
+
 
 class Hisat2:
     """ Hisat2 mapping. """
 
-    def __init__(self, input_file, index_name, threads):
+    def __init__(self, input_file: str, index_name: str, threads: int):
         which = Cmd('which hisat2')
         which.run()
 
@@ -17,8 +17,8 @@ class Hisat2:
         self.index_name = index_name
         self.threads = threads
 
-    def build_index(self):
-        """ Build the Hisat2 index. """
+    def build_index(self) -> None:
+        """Build the Hisat2 index."""
         if not self.index_build_has_run:
             logger.debug('Build Hisat2 index.')
             indexing = Cmd(f'hisat2-build -q -p {self.threads} {self.input_file} {self.index_name}')
@@ -27,8 +27,12 @@ class Hisat2:
         else:
             logger.debug('Skipping index building.')
 
-    def run(self, reads):
-        """ Run the Hisat2 mapping with the given reads. """
+    def run(self, reads: str):
+        """Run the Hisat2 mapping with the given reads.
+
+        Arguments:
+            reads: Reads to perform mapping with.
+        """
         logger.debug('Perform Hisat2 mapping.')
         if len(reads) == 1: # single end reads
             hisat = Cmd(f'hisat2 -q --threads {self.threads} -k 1 -x {self.index_name} -U {reads[0]} --no-unal | \
@@ -39,4 +43,3 @@ class Hisat2:
         hisat.run()
         self.mapping_has_run = True
         return (entry for entry in hisat.stdout.split('\n')[:-1] if not entry.startswith('@'))
-
