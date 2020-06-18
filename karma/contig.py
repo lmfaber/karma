@@ -1,23 +1,24 @@
 from logs import logger
 
+
 class Contig():
     
     def __init__(self, name):
         self.name = name
-        # self.reads = {}
         self.readset = set()
 
-    def add_read(self, name, position):
-        # self.reads[name] = position
+    def add_read(self, name):
         self.readset.add(name)
 
     def has_read(self, name):
-        return(name in self.reads)
+        return name in self.reads
 
     def load_contig_info_from_sam(self, sam_file):
-        """
-        Reads the sam file for each contig and saves the needed information in a Contig object.
+        """Reads the sam file for each contig and saves the needed information in a Contig object.
         TODO: Save contig objects so the program doesnt have to read all sam files again
+
+        Args:
+            sam_file: Sam file to read from.
         """
         logger.debug(f'Creating new contig object...')
         with open(sam_file, 'r') as sam_reader:
@@ -32,9 +33,8 @@ class Contig():
         """Read the infos from iterator in RAM.
         
         Arguments:
-            sam_infos {[type]} -- [description]
+            sam_infos: samfile as binary string.
         """
         for line in sam_infos:
             read, _, name, position, *_ = line.split('\t')
             self.add_read(read, position)
-            
