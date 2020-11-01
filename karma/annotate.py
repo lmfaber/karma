@@ -96,11 +96,11 @@ class Dammit:
 
     def calculate_sequences_per_gene(self, gene_dict_before, gene_dict_after):
         """Calculates how many sequences are per gene in the assembly.
-        
+
         Arguments:
             gene_dict_before {[type]} -- [description]
             gene_dict_after {[type]} -- [description]
-        
+
         Returns:
             [type] -- [description]
         """
@@ -130,10 +130,10 @@ class Dammit:
     def calculate_clusters_per_gene(self, gene_dict_before, gene_dict_after):
         """
         Calculates how many clusters were generated per gene.
-        
+
         Arguments:
             gene_dict_before {dict} -- dictionary containing gene/cluster as key/value
-        
+
         Returns:
             dict -- key/value: gene/no_of_clusters_before/number-of-cluster-after/no-of-seq-per-gene
         """
@@ -194,11 +194,11 @@ class Dammit:
 
     def calculate_lost_genes(self, gene_dict_before, gene_dict_after):
         """Calculates the lost genes. Genes that were detected before kmer based clustering, but not after graph clustering.
-        
+
         Arguments:
             gene_dict_before {dict} -- [description]
             gene_dict_after {dict} -- [description]
-        
+
         Returns:
             tuple -- (number_of_lost_genes, lost_genes)
         """
@@ -236,7 +236,7 @@ class Dammit:
 
     def gene_dict(self, gff, namemap, suffix):
         """Creates a dictionary of genes/transcripts.
-        
+
         Arguments:
             gff {str} -- gff file from dammit
             namemap {str} -- namemap file from dammit
@@ -284,11 +284,11 @@ class Dammit:
 
     def combine_dicts(self, a, b):
         """Combines two dictionaries and adds both values to the new dictionary.
-        
+
         Arguments:
             a {[type]} -- [description]
             b {[type]} -- [description]
-        
+
         Returns:
             [type] -- [description]
         """
@@ -309,7 +309,7 @@ class Dammit:
 
     def save(self, output):
         """Saves all calculates metrics to a file.
-        
+
         Arguments:
             output {[type]} -- [description]
         """

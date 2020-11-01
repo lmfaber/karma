@@ -19,8 +19,8 @@ class Cmd:
         self.status = None
 
     def run(self, in_stream=None):
-        """ Executes the command(s).
-        
+        """Executes the command(s).
+
         Keyword Arguments:
             in_stream {str} -- Allows to pass a binary string as stdin for the first command. (default: {None})
         """

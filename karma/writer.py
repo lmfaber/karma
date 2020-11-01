@@ -5,7 +5,7 @@ class Writer:
         self.file_name = file_name
 
     def write_fasta(self, sequences: dict) -> None:
-        """ Writes fasta sequences from a dictionary.
+        """Writes fasta sequences from a dictionary.
 
         Args:
             sequences: Sequences to write to a file. Key/Value: Header/Sequence
@@ -22,7 +22,7 @@ class Writer:
                     fasta_writer.write(part + "\n")
 
     def write_clstr(self, clusters: list, representative_sequences: list) -> None:
-        """ Writes a clstr-like ouput just as cdhit-est.
+        """Writes a clstr-like ouput just as cdhit-est.
         Mark the representative sequence with a star.
 
         Args:

@@ -16,9 +16,7 @@ class Salmon:
         self.threads = threads
 
     def build_index(self) -> None:
-        """ Builds the salmon index.
-
-        """
+        """Builds the salmon index."""
         logger.debug("Build salmon index.")
         # TODO: Implement check to avoid duplicate runs
         indexing = Cmd(
@@ -27,7 +25,7 @@ class Salmon:
         indexing.run()
 
     def run(self, reads: list) -> None:
-        """ Run the salmon mapping with the given reads.
+        """Run the salmon mapping with the given reads.
 
         Args:
             reads: List of reads. Either paired end or single end.

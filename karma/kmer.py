@@ -47,7 +47,7 @@ class KmerClustering:
     def __is_palindrome(sequence):
         """
         Checks if sequence in palindrome.
-        
+
         Arguments:
             sequence {str} -- Input string.
         """
@@ -55,7 +55,7 @@ class KmerClustering:
 
     def __count_kmer_occurence(self, sequences, kmer_size):
         """Counts actually appearing kmers in list of sequences and returns a list of Counter objects.
-        
+
         Arguments:
             sequences {dictionary} -- Dictionary where the sequences are the values.
         """
@@ -145,7 +145,7 @@ class KmerClustering:
 
     def __extract_kmers(self, sequences, kmer_size):
         """Extracts all kmers from a list of sequences.
-        
+
         Arguments:
             sequences {dictionary} -- Receives a dictionary with values as sequences.
         """
@@ -181,10 +181,10 @@ class KmerClustering:
     def __kmers_of_seq(self, sequence, kmer_size, palindromic=False):
         """
         Returns all kmers of length n from a given sequence.
-        
+
         Arguments:
             sequence {str} -- Input sequence.
-        
+
         Keyword Arguments:
             kmer_size {int} -- Kmer size
         """

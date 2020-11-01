@@ -26,7 +26,7 @@ class Contig:
 
     def load_from_iterator(self, sam_infos):
         """Read the infos from iterator in RAM.
-        
+
         Arguments:
             sam_infos {[type]} -- [description]
         """

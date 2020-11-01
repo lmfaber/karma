@@ -39,7 +39,7 @@ def basename_woe(path):
 
 def read_fasta_file(fasta_file):
     """Reads a fasta file and saves the entries as OrderedDict from collections
-    
+
     Arguments:
         fasta_file {str} -- Fasta file to read.
     """
@@ -76,7 +76,7 @@ def save_options(file_path):
 
 
 def create_lookup_dict(clusters_with_subcluster, sequences):
-    """ 
+    """
     Creates a lookup dictionary for the kmer + mcl clustered sequences. Saves the original cluster number to which each subgroup belongs and the actual cluster.
     """
     mcl_subclusters = {}
@@ -101,7 +101,7 @@ def create_lookup_dict(clusters_with_subcluster, sequences):
 
 
 def calc_connections_between_mcl_subclusters(mcl_subclusters, weight_cutoff=0):
-    """ 
+    """
     Calculates if there is a connections between subclusters and the according weight. If there is a connection, those two groups are meant to be connected later. Returns a list of tuples containing each two subclusters, that share reads.
     """
     mcl_groups_to_combine = []
@@ -337,8 +337,8 @@ def main():
 
         unlabeled_contigs = unconnected_contigs + non_mcl_cluster_contigs
 
-        cluster_representative_sequences += cluster_graph.calculate_representative_sequences(
-            lowest=args.LOWEST
+        cluster_representative_sequences += (
+            cluster_graph.calculate_representative_sequences(lowest=args.LOWEST)
         )
 
         clusters_with_subcluster.append(cluster_graph.mcl_cluster)
@@ -396,8 +396,8 @@ def main():
     assert len(flatten(clusters_with_subcluster)) == len(sequences)
 
     clustered_sequence_names = []
-    unlabeled_representative_sequences = cluster_graph.calculate_representative_sequences(
-        lowest=args.LOWEST
+    unlabeled_representative_sequences = (
+        cluster_graph.calculate_representative_sequences(lowest=args.LOWEST)
     )
     leftover_names = [f">{name[0][0]}" for name in leftover]
     clustered_sequence_names = (

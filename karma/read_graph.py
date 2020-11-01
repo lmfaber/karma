@@ -18,7 +18,7 @@ class ReadGraph(nx.Graph):
 
     @classmethod
     def from_contigs(cls, contigs: list) -> "ReadGraph":
-        """ Creates initital graph with a list of contig obejcts.
+        """Creates initital graph with a list of contig obejcts.
 
         Args:
             contigs: List of contigs.
@@ -50,7 +50,7 @@ class ReadGraph(nx.Graph):
         return cls(incoming_graph_data=graph)
 
     def set_original_contigs(self, original_contigs: list) -> None:
-        """ Sets the original contigs.
+        """Sets the original contigs.
 
         Args:
             original_contigs: List of original contigs.
@@ -62,7 +62,7 @@ class ReadGraph(nx.Graph):
     def from_equivalence_classes(
         cls, equivalence_class_file: str, sequences_from_fasta: dict
     ) -> "ReadGraph":
-        """ Builds the ReadGraph from a Salmon equivalence class file.
+        """Builds the ReadGraph from a Salmon equivalence class file.
 
         Args:
             equivalence_class_file: Salmon equivalence file
@@ -148,7 +148,7 @@ class ReadGraph(nx.Graph):
         return cls(incoming_graph_data=weighted_graph)
 
     def get_unconnected_nodes(self) -> list:
-        """ Get nodes that have no connection.
+        """Get nodes that have no connection.
 
         Returns: A list of unconnected nodes.
 
@@ -160,7 +160,7 @@ class ReadGraph(nx.Graph):
         return unconnected_nodes
 
     def get_connected_nodes(self) -> list:
-        """ Returns all connected nodes in a graph as list.
+        """Returns all connected nodes in a graph as list.
 
         Returns: A list with all connected nodes.
 
@@ -172,7 +172,7 @@ class ReadGraph(nx.Graph):
         return connected_nodes
 
     def __calculate_node_weights(self) -> dict:
-        """ For all nodes:
+        """For all nodes:
         Adds the weights for each connection for a node in the graph.
 
         Returns: A dictionary.
@@ -240,7 +240,7 @@ class ReadGraph(nx.Graph):
         nx.write_weighted_edgelist(graph, filename)
 
     def get_contigs_not_in_mcl_cluster(self, mcl_cluster_file, original_contigs=None):
-        """ Remove all contigs that don't have a connection to the original contigs.
+        """Remove all contigs that don't have a connection to the original contigs.
         Returns all contigs that either:
             1. are not in a group with the original contigs.
             2. Dont have a connection to another contig
@@ -344,9 +344,7 @@ class ReadGraph(nx.Graph):
         return representative_sequences
 
     def nodes_list(self) -> list:
-        """Returns the nodes in the graph.
-
-        """
+        """Returns the nodes in the graph."""
         return list(self.nodes())
 
     def edge_list(self) -> str:
@@ -359,7 +357,7 @@ class ReadGraph(nx.Graph):
         return "\n".join(edges).encode("utf-8")
 
     def calc_distance_between_subgraphs(self, nodes_a: list, nodes_b: list) -> int:
-        """ Calculates the distance between two subgraphs.
+        """Calculates the distance between two subgraphs.
 
         Args:
             nodes_a: Nodes from graph A.
@@ -376,7 +374,7 @@ class ReadGraph(nx.Graph):
 
     def draw_graph(self, output_file, draw) -> None:
         """Draws a graph without edges of weight zero.
-        
+
         Arguments:
             G {graph} -- Networkx graph.
             output_file {str} -- Output file.
