@@ -15,8 +15,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-      with:
-        GITHUB_WORKSPACE: /home/karma
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
@@ -33,7 +31,7 @@ jobs:
         # if [ -f requirements.txt ]; then conda install --yes --file requirements.txt; fi
     - name: Code format with black
       run: |
-        black --check /home/karma
+        black --check ${GITHUB_WORKSPACE}
     - name: Test with pytest
       run: |
-        pytest /home/karma
+        pytest ${GITHUB_WORKSPACE}
