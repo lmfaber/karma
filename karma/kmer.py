@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 import umap
-from logs import logger
+from karma.logs import logger
 
 
 class KmerClustering:
@@ -44,7 +44,7 @@ class KmerClustering:
         return (labeled, unlabeled)
 
     @staticmethod
-    def __is_palindrome(sequence):
+    def is_palindrome(sequence):
         """
         Checks if sequence in palindrome.
 
