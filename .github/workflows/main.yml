@@ -23,7 +23,7 @@ jobs:
       with:
         activate-conda: true
         update-conda: true
-        conda-channels: [bioconda, conda-forge]
+        conda-channels: bioconda, conda-forge
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
