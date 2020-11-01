@@ -1,0 +1,12 @@
+name: karma
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - hdbscan
+  - blast
+  - dammit
+  - biopython
+  - hisat2
+  - mcl
+  - salmon
