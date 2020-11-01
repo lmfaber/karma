@@ -5,3 +5,4 @@ dammit
 biopython
 hisat2
 mcl
+salmon
