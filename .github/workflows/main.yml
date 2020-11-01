@@ -28,7 +28,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install pytest black
-        # if [ -f requirements.txt ]; then conda install --yes --file requirements.txt; fi
+        if [ -f requirements.txt ]; then conda install --yes --file requirements.txt; fi
     - name: Code format with black
       run: |
         black --check ${GITHUB_WORKSPACE}
